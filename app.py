@@ -1,4 +1,6 @@
 import os
+import cloudinary
+import cloudinary.uploader
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from flask_socketio import SocketIO, emit
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -11,11 +13,16 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'supersecretkey123'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
+cloudinary.config(
+    cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME'),
+    api_key=os.environ.get('CLOUDINARY_API_KEY'),
+    api_secret=os.environ.get('CLOUDINARY_API_SECRET')
+)
+
 connected_users = {}
 login_attempts = defaultdict(list)
 RATE_LIMIT = 10
 BLOCK_TIME = 10
-
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
 def get_db():
@@ -29,15 +36,21 @@ def init_db():
     cur.execute('''CREATE TABLE IF NOT EXISTS users (
         id SERIAL PRIMARY KEY,
         username TEXT UNIQUE NOT NULL,
+        user_id TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL,
-        public_key TEXT
+        public_key TEXT,
+        avatar_url TEXT,
+        wallpaper_url TEXT
     )''')
     cur.execute('''CREATE TABLE IF NOT EXISTS messages (
         id SERIAL PRIMARY KEY,
         sender TEXT NOT NULL,
         receiver TEXT NOT NULL,
-        message TEXT NOT NULL,
+        message TEXT,
         sender_message TEXT,
+        msg_type TEXT DEFAULT 'text',
+        media_url TEXT,
+        reply_to TEXT,
         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
     cur.execute('''CREATE TABLE IF NOT EXISTS friend_requests (
@@ -47,8 +60,13 @@ def init_db():
         status TEXT DEFAULT 'pending',
         UNIQUE(sender, receiver)
     )''')
-    # Add sender_message column if it doesn't exist (for existing DBs)
+    cur.execute('''ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT''')
+    cur.execute('''ALTER TABLE users ADD COLUMN IF NOT EXISTS wallpaper_url TEXT''')
+    cur.execute('''ALTER TABLE users ADD COLUMN IF NOT EXISTS user_id TEXT''')
     cur.execute('''ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_message TEXT''')
+    cur.execute('''ALTER TABLE messages ADD COLUMN IF NOT EXISTS msg_type TEXT DEFAULT 'text' ''')
+    cur.execute('''ALTER TABLE messages ADD COLUMN IF NOT EXISTS media_url TEXT''')
+    cur.execute('''ALTER TABLE messages ADD COLUMN IF NOT EXISTS reply_to TEXT''')
     conn.commit()
     cur.close()
     conn.close()
@@ -73,12 +91,16 @@ def are_friends(a, b):
     conn.close()
     return row is not None
 
+def generate_user_id():
+    import random, string
+    return ''.join(random.choices(string.digits, k=4))
+
 init_db()
 
 @app.route('/')
 def index():
     if 'username' not in session:
-        return redirect(url_for('login'))
+        return render_template('landing.html')
     return render_template('index.html', username=session['username'])
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -111,10 +133,11 @@ def signup():
         username = request.form['username']
         password = request.form['password']
         hashed = generate_password_hash(password)
+        uid = generate_user_id()
         try:
             conn = get_db()
             cur = conn.cursor()
-            cur.execute('INSERT INTO users (username, password) VALUES (%s, %s)', (username, hashed))
+            cur.execute('INSERT INTO users (username, user_id, password) VALUES (%s, %s, %s)', (username, uid, hashed))
             conn.commit()
             cur.close()
             conn.close()
@@ -130,7 +153,7 @@ def signup():
 @app.route('/logout')
 def logout():
     session.pop('username', None)
-    return redirect(url_for('login'))
+    return redirect(url_for('index'))
 
 @app.route('/save_key', methods=['POST'])
 def save_key():
@@ -157,23 +180,99 @@ def pubkey(username):
         return jsonify({'key': row['public_key']})
     return jsonify({'key': None})
 
+@app.route('/profile')
+def get_profile():
+    if 'username' not in session:
+        return jsonify({})
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute('SELECT username, user_id, avatar_url, wallpaper_url FROM users WHERE username=%s', (session['username'],))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return jsonify(dict(row))
+
+@app.route('/profile/<username>')
+def get_user_profile(username):
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute('SELECT username, user_id, avatar_url FROM users WHERE username=%s', (username,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    if row:
+        return jsonify(dict(row))
+    return jsonify({})
+
+@app.route('/upload_avatar', methods=['POST'])
+def upload_avatar():
+    if 'username' not in session:
+        return jsonify({'ok': False})
+    file = request.files.get('file')
+    if not file:
+        return jsonify({'ok': False})
+    result = cloudinary.uploader.upload(file, folder='avatars', transformation=[{'width': 200, 'height': 200, 'crop': 'fill'}])
+    url = result['secure_url']
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('UPDATE users SET avatar_url=%s WHERE username=%s', (url, session['username']))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({'ok': True, 'url': url})
+
+@app.route('/upload_wallpaper', methods=['POST'])
+def upload_wallpaper():
+    if 'username' not in session:
+        return jsonify({'ok': False})
+    file = request.files.get('file')
+    if not file:
+        return jsonify({'ok': False})
+    result = cloudinary.uploader.upload(file, folder='wallpapers')
+    url = result['secure_url']
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('UPDATE users SET wallpaper_url=%s WHERE username=%s', (url, session['username']))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({'ok': True, 'url': url})
+
+@app.route('/upload_media', methods=['POST'])
+def upload_media():
+    if 'username' not in session:
+        return jsonify({'ok': False})
+    file = request.files.get('file')
+    if not file:
+        return jsonify({'ok': False})
+    resource_type = 'video' if file.content_type.startswith('video') else 'image' if file.content_type.startswith('image') else 'raw'
+    result = cloudinary.uploader.upload(file, folder='chat_media', resource_type=resource_type)
+    return jsonify({'ok': True, 'url': result['secure_url'], 'type': resource_type})
+
 @app.route('/users')
 def get_users():
     if 'username' not in session:
         return jsonify([])
     q = request.args.get('q', '').lower()
+    me = session['username']
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('SELECT username FROM users WHERE username != %s', (session['username'],))
+    # Get friend usernames
+    cur.execute('''SELECT CASE WHEN sender=%s THEN receiver ELSE sender END as friend
+        FROM friend_requests WHERE (sender=%s OR receiver=%s) AND status='accepted' ''', (me, me, me))
+    friends = {r['friend'] for r in cur.fetchall()}
+    cur.execute('SELECT username, user_id, avatar_url FROM users WHERE username != %s', (me,))
     users = cur.fetchall()
     cur.close()
     conn.close()
     online = list(connected_users.keys())
     result = []
     for u in users:
-        if q and q not in u['username'].lower():
+        if u['username'] in friends:
+            continue  # hide already friends
+        if q and q not in u['username'].lower() and q not in (u['user_id'] or '').lower():
             continue
-        result.append({'username': u['username'], 'online': u['username'] in online})
+        result.append({'username': u['username'], 'user_id': u['user_id'], 'avatar_url': u['avatar_url'], 'online': u['username'] in online})
     return jsonify(result)
 
 @app.route('/friends')
@@ -183,16 +282,19 @@ def get_friends():
     me = session['username']
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('''
-        SELECT CASE WHEN sender=%s THEN receiver ELSE sender END as friend
-        FROM friend_requests
-        WHERE (sender=%s OR receiver=%s) AND status='accepted'
-    ''', (me, me, me))
+    cur.execute('''SELECT CASE WHEN sender=%s THEN receiver ELSE sender END as friend
+        FROM friend_requests WHERE (sender=%s OR receiver=%s) AND status='accepted' ''', (me, me, me))
     rows = cur.fetchall()
+    friends = [r['friend'] for r in rows]
+    result = []
+    for f in friends:
+        cur.execute('SELECT username, user_id, avatar_url FROM users WHERE username=%s', (f,))
+        u = cur.fetchone()
+        if u:
+            result.append({'username': u['username'], 'user_id': u['user_id'], 'avatar_url': u['avatar_url'], 'online': f in connected_users})
     cur.close()
     conn.close()
-    online = list(connected_users.keys())
-    return jsonify([{'username': r['friend'], 'online': r['friend'] in online} for r in rows])
+    return jsonify(result)
 
 @app.route('/friend_requests')
 def get_friend_requests():
@@ -241,6 +343,20 @@ def respond_request(from_user, action):
         socketio.emit('request_accepted', {'by': me}, to=connected_users[from_user])
     return jsonify({'ok': True})
 
+@app.route('/remove_friend/<other>', methods=['POST'])
+def remove_friend(other):
+    if 'username' not in session:
+        return jsonify({'ok': False})
+    me = session['username']
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('''DELETE FROM friend_requests 
+        WHERE ((sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s))''', (me, other, other, me))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return jsonify({'ok': True})
+
 @app.route('/history/<other>')
 def history(other):
     if 'username' not in session:
@@ -250,11 +366,9 @@ def history(other):
         return jsonify([])
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('''
-        SELECT sender, message, sender_message, timestamp FROM messages
-        WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s)
-        ORDER BY timestamp ASC
-    ''', (me, other, other, me))
+    cur.execute('''SELECT sender, message, sender_message, msg_type, media_url, reply_to, timestamp 
+        FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s)
+        ORDER BY timestamp ASC''', (me, other, other, me))
     msgs = cur.fetchall()
     cur.close()
     conn.close()
@@ -262,6 +376,9 @@ def history(other):
         'sender': m['sender'],
         'message': m['message'],
         'sender_message': m['sender_message'],
+        'msg_type': m['msg_type'],
+        'media_url': m['media_url'],
+        'reply_to': m['reply_to'],
         'timestamp': str(m['timestamp'])
     } for m in msgs])
 
@@ -281,20 +398,30 @@ def handle_disconnect():
 def handle_private(data):
     sender = session['username']
     receiver = data['receiver']
-    message = data['message']           # encrypted with receiver's key
-    sender_message = data.get('sender_message', '')  # encrypted with sender's own key
+    message = data.get('message', '')
+    sender_message = data.get('sender_message', '')
+    msg_type = data.get('msg_type', 'text')
+    media_url = data.get('media_url', '')
+    reply_to = data.get('reply_to', '')
     if not are_friends(sender, receiver):
         return
     conn = get_db()
     cur = conn.cursor()
-    cur.execute('INSERT INTO messages (sender, receiver, message, sender_message) VALUES (%s, %s, %s, %s)',
-                (sender, receiver, message, sender_message))
+    cur.execute('''INSERT INTO messages (sender, receiver, message, sender_message, msg_type, media_url, reply_to) 
+        VALUES (%s, %s, %s, %s, %s, %s, %s)''',
+        (sender, receiver, message, sender_message, msg_type, media_url, reply_to))
     conn.commit()
     cur.close()
     conn.close()
     if receiver in connected_users:
-        emit('private_message', {'sender': sender, 'message': message}, to=connected_users[receiver])
-    emit('private_message', {'sender': sender, 'message': sender_message, 'is_own': True}, to=request.sid)
+        emit('private_message', {
+            'sender': sender, 'message': message,
+            'msg_type': msg_type, 'media_url': media_url, 'reply_to': reply_to
+        }, to=connected_users[receiver])
+    emit('private_message', {
+        'sender': sender, 'message': sender_message, 'is_own': True,
+        'msg_type': msg_type, 'media_url': media_url, 'reply_to': reply_to
+    }, to=request.sid)
 
 @app.route('/nuke')
 def nuke():
@@ -306,6 +433,7 @@ def nuke():
     conn.commit()
     cur.close()
     conn.close()
+    session.clear()
     return 'wiped'
 
 if __name__ == '__main__':
