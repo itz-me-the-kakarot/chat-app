@@ -37,6 +37,7 @@ def init_db():
         sender TEXT NOT NULL,
         receiver TEXT NOT NULL,
         message TEXT NOT NULL,
+        sender_message TEXT,
         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
     cur.execute('''CREATE TABLE IF NOT EXISTS friend_requests (
@@ -46,6 +47,8 @@ def init_db():
         status TEXT DEFAULT 'pending',
         UNIQUE(sender, receiver)
     )''')
+    # Add sender_message column if it doesn't exist (for existing DBs)
+    cur.execute('''ALTER TABLE messages ADD COLUMN IF NOT EXISTS sender_message TEXT''')
     conn.commit()
     cur.close()
     conn.close()
@@ -245,14 +248,19 @@ def history(other):
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute('''
-        SELECT sender, message, timestamp FROM messages
+        SELECT sender, message, sender_message, timestamp FROM messages
         WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s)
         ORDER BY timestamp ASC
     ''', (me, other, other, me))
     msgs = cur.fetchall()
     cur.close()
     conn.close()
-    return jsonify([{'sender': m['sender'], 'message': m['message'], 'timestamp': str(m['timestamp'])} for m in msgs])
+    return jsonify([{
+        'sender': m['sender'],
+        'message': m['message'],
+        'sender_message': m['sender_message'],
+        'timestamp': str(m['timestamp'])
+    } for m in msgs])
 
 @socketio.on('connect')
 def handle_connect():
@@ -270,29 +278,20 @@ def handle_disconnect():
 def handle_private(data):
     sender = session['username']
     receiver = data['receiver']
-    message = data['message']
+    message = data['message']           # encrypted with receiver's key
+    sender_message = data.get('sender_message', '')  # encrypted with sender's own key
     if not are_friends(sender, receiver):
         return
     conn = get_db()
     cur = conn.cursor()
-    cur.execute('INSERT INTO messages (sender, receiver, message) VALUES (%s, %s, %s)', (sender, receiver, message))
+    cur.execute('INSERT INTO messages (sender, receiver, message, sender_message) VALUES (%s, %s, %s, %s)',
+                (sender, receiver, message, sender_message))
     conn.commit()
     cur.close()
     conn.close()
-    plain = data.get('plain', '')
     if receiver in connected_users:
         emit('private_message', {'sender': sender, 'message': message}, to=connected_users[receiver])
-    emit('private_message', {'sender': sender, 'message': message, 'plain': plain}, to=request.sid)
-
-@app.route('/clear_messages')
-def clear_messages():
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute('DELETE FROM messages')
-    conn.commit()
-    cur.close()
-    conn.close()
-    return 'done'
+    emit('private_message', {'sender': sender, 'message': sender_message, 'is_own': True}, to=request.sid)
 
 @app.route('/nuke')
 def nuke():
