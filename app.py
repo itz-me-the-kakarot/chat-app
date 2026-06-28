@@ -253,6 +253,7 @@ def handle_private(data):
         emit('private_message', {'sender': sender, 'message': message}, to=connected_users[receiver])
     emit('private_message', {'sender': sender, 'message': message}, to=request.sid)
 
+init_db()
+
 if __name__ == '__main__':
-    init_db()
     socketio.run(app, debug=True)
