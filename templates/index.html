@@ -296,16 +296,19 @@ function closeProfile() {
 async function uploadAvatar(input) {
   const file = input.files[0];
   if (!file) return;
+
   const fd = new FormData();
   fd.append('file', file);
-  const res = await fetch('/upload_avatar', { method: 'POST', body: fd });
+  fd.append('upload_preset', 'chatly_upload');
+
+  const res = await fetch('https://api.cloudinary.com/v1_1/ddgmbuhg9/image/upload', { method: 'POST', body: fd });
   const data = await res.json();
-  if (data.ok) {
-    document.getElementById('myAvatarBtn').innerHTML = `<img src="${data.url}"/>`;
-    document.getElementById('profileAvatarBig').innerHTML = `<img src="${data.url}"/>`;
+  if (data.secure_url) {
+    await fetch('/upload_avatar', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({url: data.secure_url}) });
+    document.getElementById('myAvatarBtn').innerHTML = `<img src="${data.secure_url}"/>`;
+    document.getElementById('profileAvatarBig').innerHTML = `<img src="${data.secure_url}"/>`;
   }
 }
-
 async function uploadWallpaper(input) {
   const file = input.files[0];
   if (!file) return;
@@ -552,18 +555,29 @@ async function sendFile(input) {
   const file = input.files[0];
   if (!file || !currentChat) return;
 
+  const CLOUD_NAME = 'ddgmbuhg9';
+  const PRESET = 'chatly_upload';
+
   const fd = new FormData();
   fd.append('file', file);
-  const res = await fetch('/upload_media', { method: 'POST', body: fd });
+  fd.append('upload_preset', PRESET);
+
+  const resourceType = file.type.startsWith('video') ? 'video' : 'image' in file.type ? 'image' : 'raw';
+  const actualType = file.type.startsWith('video') ? 'video' : file.type.startsWith('image') ? 'image' : 'file';
+
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${actualType === 'file' ? 'raw' : actualType}/upload`, {
+    method: 'POST',
+    body: fd
+  });
   const data = await res.json();
-  if (!data.ok) { alert('Upload failed'); return; }
+  if (!data.secure_url) { alert('Upload failed'); return; }
 
   socket.emit('private_message', {
     receiver: currentChat,
     message: '',
     sender_message: '',
-    msg_type: data.type === 'video' ? 'video' : data.type === 'image' ? 'image' : 'file',
-    media_url: data.url,
+    msg_type: actualType,
+    media_url: data.secure_url,
     reply_to: replyingTo || ''
   });
   cancelReply();
