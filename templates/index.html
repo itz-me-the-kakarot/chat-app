@@ -301,14 +301,14 @@ async function sendMsg() {
   const msg = input.value.trim();
   if (!msg || !currentChat) return;
   const encrypted = await encryptMsg(currentChat, msg);
-  socket.emit('private_message', { receiver: currentChat, message: encrypted });
+  socket.emit('private_message', { receiver: currentChat, message: encrypted, plain: msg });
   input.value = '';
 }
 
 socket.on('private_message', async function(data) {
   if (data.sender === currentChat || (data.sender === me && currentChat)) {
-    const plain = await decryptMsg(data.message);
-    appendMessage(data.sender, plain, data.sender === me);
+    const plain = data.sender === me ? data.plain : await decryptMsg(data.message);
+   appendMessage(data.sender, plain, data.sender === me);
   }
 });
 
