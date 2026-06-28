@@ -16,7 +16,7 @@ RATE_LIMIT = 10       # max attempts
 BLOCK_TIME = 10       # seconds
 
 def get_db():
-    conn = sqlite3.connect('chat.db')
+    conn = sqlite3.connect('chat.db', check_same_thread=False)
     conn.row_factory = sqlite3.Row
     return conn
 
