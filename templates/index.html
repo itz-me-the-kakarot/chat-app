@@ -10,27 +10,10 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: #0a0f1e; color: #e8eaf0; font-family: 'Inter', sans-serif; height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
 
-    /* ── Contacts screen ── */
-    #contactsScreen {
-      display: flex;
-      flex-direction: column;
-      height: 100vh;
-      background: #0d1426;
-    }
-
-    .contacts-header {
-      padding: 18px 16px 12px;
-      border-bottom: 1px solid #1e2a45;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-    }
-
+    #contactsScreen { display: flex; flex-direction: column; height: 100vh; background: #0d1426; }
+    .contacts-header { padding: 18px 16px 12px; border-bottom: 1px solid #1e2a45; display: flex; align-items: center; justify-content: space-between; }
     .contacts-header h2 { font-family: 'Space Grotesk', sans-serif; font-size: 18px; font-weight: 600; }
     .my-username { font-size: 12px; color: #4f8ef7; margin-top: 2px; }
-
-    .header-right { display: flex; gap: 10px; align-items: center; }
-    .icon-btn { background: none; border: none; color: #a0aec0; font-size: 20px; cursor: pointer; padding: 4px; }
 
     .search-box { padding: 10px 12px 6px; }
     .search-box input { width: 100%; background: #1a2340; border: 1px solid #1e2a45; border-radius: 12px; padding: 10px 14px; color: #e8eaf0; font-size: 14px; outline: none; font-family: 'Inter', sans-serif; }
@@ -43,41 +26,27 @@
     .notif-dot { display: inline-block; width: 7px; height: 7px; background: #f87171; border-radius: 50%; margin-left: 4px; vertical-align: middle; }
 
     .users-list { flex: 1; overflow-y: auto; padding: 6px; scrollbar-width: thin; scrollbar-color: #1e2a45 transparent; }
-
     .user-item { display: flex; align-items: center; gap: 12px; padding: 11px 10px; border-radius: 14px; cursor: pointer; transition: background 0.15s; }
     .user-item:hover, .user-item:active { background: #1a2340; }
-
     .user-avatar { width: 42px; height: 42px; border-radius: 50%; background: linear-gradient(135deg, #4f8ef7, #a78bfa); display: flex; align-items: center; justify-content: center; font-family: 'Space Grotesk', sans-serif; font-size: 15px; font-weight: 600; flex-shrink: 0; position: relative; }
     .online-badge { width: 10px; height: 10px; background: #22c55e; border-radius: 50%; position: absolute; bottom: 1px; right: 1px; border: 2px solid #0d1426; }
-
     .user-info .name { font-size: 14px; font-weight: 500; }
     .user-info .status { font-size: 12px; color: #4a5568; margin-top: 2px; }
-
     .action-btns { display: flex; gap: 6px; margin-left: auto; }
     .btn-sm { padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; border: none; cursor: pointer; font-family: 'Space Grotesk', sans-serif; }
     .btn-accept { background: #4f8ef7; color: white; }
     .btn-decline { background: #1a2340; color: #f87171; border: 1px solid #f87171; }
     .btn-add { background: #1a2340; color: #4f8ef7; border: 1px solid #4f8ef7; }
-
     .empty-msg { color: #4a5568; font-size: 13px; padding: 20px 14px; text-align: center; }
-
     .logout-btn { margin: 10px 12px; padding: 10px; background: transparent; border: 1px solid #1e2a45; border-radius: 12px; color: #4a5568; font-size: 13px; cursor: pointer; width: calc(100% - 24px); font-family: 'Inter', sans-serif; }
     .logout-btn:hover { border-color: #f87171; color: #f87171; }
 
-    /* ── Chat screen ── */
-    #chatScreen {
-      display: none;
-      flex-direction: column;
-      height: 100vh;
-      background: #0a0f1e;
-    }
-
-    .chat-header { padding: 14px 14px; background: #0d1426; border-bottom: 1px solid #1e2a45; display: flex; align-items: center; gap: 12px; }
+    #chatScreen { display: none; flex-direction: column; height: 100vh; background: #0a0f1e; }
+    .chat-header { padding: 14px; background: #0d1426; border-bottom: 1px solid #1e2a45; display: flex; align-items: center; gap: 12px; }
     .back-btn { background: none; border: none; color: #4f8ef7; font-size: 22px; cursor: pointer; padding: 2px 6px 2px 0; }
     .chat-header .avatar { width: 38px; height: 38px; border-radius: 50%; background: linear-gradient(135deg, #4f8ef7, #a78bfa); display: flex; align-items: center; justify-content: center; font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 600; flex-shrink: 0; }
     .chat-header h3 { font-family: 'Space Grotesk', sans-serif; font-size: 15px; font-weight: 600; }
     .chat-header .sub { font-size: 12px; color: #4f8ef7; }
-
     .e2e-badge { font-size: 11px; color: #22c55e; text-align: center; padding: 5px; background: #0a1a0f; border-bottom: 1px solid #1e2a45; }
 
     #messages { flex: 1; overflow-y: auto; padding: 14px 12px; display: flex; flex-direction: column; gap: 8px; list-style: none; scrollbar-width: thin; scrollbar-color: #1e2a45 transparent; }
@@ -85,7 +54,6 @@
     #messages li .msg-sender { font-size: 11px; color: #4f8ef7; margin-bottom: 3px; font-weight: 600; }
     #messages li.sent { align-self: flex-end; background: linear-gradient(135deg, #4f8ef7, #3b6fd4); color: #fff; border-bottom-right-radius: 4px; border-bottom-left-radius: 18px; }
     #messages li.sent .msg-sender { color: rgba(255,255,255,0.7); }
-
     @keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
     .input-area { padding: 10px 12px; border-top: 1px solid #1e2a45; display: flex; gap: 10px; align-items: center; background: #0d1426; }
@@ -98,7 +66,6 @@
 </head>
 <body>
 
-  <!-- Contacts Screen -->
   <div id="contactsScreen">
     <div class="contacts-header">
       <div>
@@ -106,22 +73,18 @@
         <div class="my-username">@{{ username }}</div>
       </div>
     </div>
-
     <div class="search-box">
       <input type="text" id="searchInput" placeholder="Search..." oninput="onSearch()"/>
     </div>
-
     <div class="tab-bar">
       <div class="tab active" onclick="switchTab('friends', this)">Chats</div>
       <div class="tab" onclick="switchTab('requests', this)" id="reqTab">Requests</div>
       <div class="tab" onclick="switchTab('search', this)">Add</div>
     </div>
-
     <div class="users-list" id="usersList"></div>
     <a href="/logout"><button class="logout-btn">Sign out</button></a>
   </div>
 
-  <!-- Chat Screen -->
   <div id="chatScreen">
     <div class="chat-header">
       <button class="back-btn" onclick="goBack()">&#8592;</button>
@@ -148,6 +111,7 @@ let onlineUsers = [];
 let currentTab = 'friends';
 let publicKeys = {};
 let myPrivateKey = null;
+let myPublicKey = null;
 
 const socket = io({ autoConnect: false });
 
@@ -156,12 +120,17 @@ async function initKeys() {
   const stored = localStorage.getItem('privkey_' + me);
   if (stored) {
     myPrivateKey = await crypto.subtle.importKey('jwk', JSON.parse(stored), { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['decrypt']);
+    const pubStored = localStorage.getItem('pubkey_' + me);
+    if (pubStored) {
+      myPublicKey = await crypto.subtle.importKey('jwk', JSON.parse(pubStored), { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['encrypt']);
+    }
   } else {
     const pair = await crypto.subtle.generateKey({ name: 'RSA-OAEP', modulusLength: 2048, publicExponent: new Uint8Array([1,0,1]), hash: 'SHA-256' }, true, ['encrypt','decrypt']);
     myPrivateKey = pair.privateKey;
+    myPublicKey = pair.publicKey;
     const privJwk = await crypto.subtle.exportKey('jwk', pair.privateKey);
-    localStorage.setItem('privkey_' + me, JSON.stringify(privJwk));
     const pubJwk = await crypto.subtle.exportKey('jwk', pair.publicKey);
+    localStorage.setItem('privkey_' + me, JSON.stringify(privJwk));
     localStorage.setItem('pubkey_' + me, JSON.stringify(pubJwk));
     await fetch('/save_key', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({key: JSON.stringify(pubJwk)}) });
   }
@@ -177,9 +146,7 @@ async function getPublicKey(username) {
   return key;
 }
 
-async function encryptMsg(username, text) {
-  const key = await getPublicKey(username);
-  if (!key) return text;
+async function encryptWith(key, text) {
   const buf = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, key, new TextEncoder().encode(text));
   return btoa(String.fromCharCode(...new Uint8Array(buf)));
 }
@@ -189,7 +156,7 @@ async function decryptMsg(cipher) {
     const buf = Uint8Array.from(atob(cipher), c => c.charCodeAt(0));
     const dec = await crypto.subtle.decrypt({ name: 'RSA-OAEP' }, myPrivateKey, buf);
     return new TextDecoder().decode(dec);
-  } catch { return cipher; }
+  } catch { return '🔒 (decryption failed)'; }
 }
 
 // ── Navigation ────────────────────────────────────────────────
@@ -214,7 +181,7 @@ async function renderTab() {
   if (currentTab === 'friends') {
     const res = await fetch('/friends');
     const friends = await res.json();
-    if (!friends.length) { list.innerHTML = '<div class="empty-msg">No friends yet.<br>Go to Add tab to find people.</div>'; return; }
+    if (!friends.length) { list.innerHTML = '<div class="empty-msg">No friends yet.<br>Go to Add tab.</div>'; return; }
     friends.forEach(u => renderUserItem(list, u, 'friend'));
   } else if (currentTab === 'requests') {
     const res = await fetch('/friend_requests');
@@ -271,17 +238,27 @@ async function respondRequest(from, action) {
 async function openChat(username) {
   currentChat = username;
   document.getElementById('contactsScreen').style.display = 'none';
-  document.getElementById('chatScreen').style.display = 'flex';
-  document.getElementById('chatScreen').style.flexDirection = 'column';
+  const cs = document.getElementById('chatScreen');
+  cs.style.display = 'flex';
+  cs.style.flexDirection = 'column';
   document.getElementById('chatName').textContent = username;
   document.getElementById('chatAvatar').textContent = username[0].toUpperCase();
   document.getElementById('chatStatus').textContent = onlineUsers.includes(username) ? 'online' : 'offline';
   document.getElementById('messages').innerHTML = '';
 
+  // Pre-fetch their public key
+  await getPublicKey(username);
+
   const res = await fetch('/history/' + username);
   const msgs = await res.json();
   for (const m of msgs) {
-    const plain = await decryptMsg(m.message);
+    let plain;
+    if (m.sender === me) {
+      // Use sender_message (encrypted with our own key)
+      plain = m.sender_message ? await decryptMsg(m.sender_message) : '🔒';
+    } else {
+      plain = await decryptMsg(m.message);
+    }
     appendMessage(m.sender, plain, m.sender === me);
   }
   document.getElementById('msg').focus();
@@ -300,15 +277,31 @@ async function sendMsg() {
   const input = document.getElementById('msg');
   const msg = input.value.trim();
   if (!msg || !currentChat) return;
-  const encrypted = await encryptMsg(currentChat, msg);
-  socket.emit('private_message', { receiver: currentChat, message: encrypted, plain: msg });
+
+  const receiverKey = await getPublicKey(currentChat);
+  if (!receiverKey) { alert('Cannot get recipient key'); return; }
+
+  // Encrypt for receiver
+  const encryptedForReceiver = await encryptWith(receiverKey, msg);
+  // Encrypt for self (so we can decrypt history)
+  const encryptedForSelf = await encryptWith(myPublicKey, msg);
+
+  socket.emit('private_message', {
+    receiver: currentChat,
+    message: encryptedForReceiver,
+    sender_message: encryptedForSelf
+  });
   input.value = '';
 }
 
 socket.on('private_message', async function(data) {
-  if (data.sender === currentChat || (data.sender === me && currentChat)) {
-    const plain = data.sender === me ? data.plain : await decryptMsg(data.message);
-   appendMessage(data.sender, plain, data.sender === me);
+  if (data.sender !== currentChat && !data.is_own) return;
+  if (data.is_own) {
+    const plain = await decryptMsg(data.message);
+    appendMessage(me, plain, true);
+  } else if (data.sender === currentChat) {
+    const plain = await decryptMsg(data.message);
+    appendMessage(data.sender, plain, false);
   }
 });
 
@@ -326,8 +319,8 @@ socket.on('user_list_update', function(users) {
 document.getElementById('msg').addEventListener('keydown', e => { if (e.key === 'Enter') sendMsg(); });
 
 initKeys().then(() => {
-  renderTab();
   socket.connect();
+  renderTab();
 });
 </script>
 </body>
