@@ -294,5 +294,17 @@ def clear_messages():
     conn.close()
     return 'done'
 
+@app.route('/nuke')
+def nuke():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('DELETE FROM messages')
+    cur.execute('DELETE FROM friend_requests')
+    cur.execute('DELETE FROM users')
+    conn.commit()
+    cur.close()
+    conn.close()
+    return 'wiped'
+
 if __name__ == '__main__':
     socketio.run(app, debug=True)
