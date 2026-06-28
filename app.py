@@ -11,11 +11,6 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = 'supersecretkey123'
 socketio = SocketIO(app, cors_allowed_origins="*")
 
-cloudinary.config(
-    cloud_name=os.environ.get('CLOUDINARY_CLOUD_NAME'),
-    api_key=os.environ.get('CLOUDINARY_API_KEY'),
-    api_secret=os.environ.get('CLOUDINARY_API_SECRET')
-)
 
 connected_users = {}
 login_attempts = defaultdict(list)
