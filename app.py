@@ -121,6 +121,9 @@ def signup():
             session['username'] = username
             return redirect(url_for('index'))
         except psycopg2.IntegrityError:
+            conn.rollback()
+            cur.close()
+            conn.close()
             error = 'Username already taken'
     return render_template('signup.html', error=error)
 
