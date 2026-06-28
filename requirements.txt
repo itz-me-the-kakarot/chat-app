@@ -2,4 +2,5 @@ flask
 flask-socketio
 werkzeug
 gunicorn
-eventlet==0.33.3
+gevent
+gevent-websocket
