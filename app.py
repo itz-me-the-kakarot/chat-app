@@ -279,9 +279,10 @@ def handle_private(data):
     conn.commit()
     cur.close()
     conn.close()
+    plain = data.get('plain', '')
     if receiver in connected_users:
         emit('private_message', {'sender': sender, 'message': message}, to=connected_users[receiver])
-    emit('private_message', {'sender': sender, 'message': message}, to=request.sid)
+    emit('private_message', {'sender': sender, 'message': message, 'plain': plain}, to=request.sid)
 
 if __name__ == '__main__':
     socketio.run(app, debug=True)
