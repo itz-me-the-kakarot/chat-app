@@ -4,4 +4,4 @@ werkzeug
 gunicorn
 gevent
 gevent-websocket
-psycopg2-binaryv
+psycopg2-binary
