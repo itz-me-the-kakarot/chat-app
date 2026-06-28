@@ -562,7 +562,6 @@ async function sendFile(input) {
   fd.append('file', file);
   fd.append('upload_preset', PRESET);
 
-  const resourceType = file.type.startsWith('video') ? 'video' : 'image' in file.type ? 'image' : 'raw';
   const actualType = file.type.startsWith('video') ? 'video' : file.type.startsWith('image') ? 'image' : 'file';
 
   const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${actualType === 'file' ? 'raw' : actualType}/upload`, {
