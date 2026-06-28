@@ -206,46 +206,34 @@ def get_user_profile(username):
 def upload_avatar():
     if 'username' not in session:
         return jsonify({'ok': False})
-    file = request.files.get('file')
-    if not file:
-        return jsonify({'ok': False})
-    result = cloudinary.uploader.upload(file, folder='avatars', transformation=[{'width': 200, 'height': 200, 'crop': 'fill'}])
-    url = result['secure_url']
+    data = request.json
     conn = get_db()
     cur = conn.cursor()
-    cur.execute('UPDATE users SET avatar_url=%s WHERE username=%s', (url, session['username']))
+    cur.execute('UPDATE users SET avatar_url=%s WHERE username=%s', (data['url'], session['username']))
     conn.commit()
     cur.close()
     conn.close()
-    return jsonify({'ok': True, 'url': url})
+    return jsonify({'ok': True})
 
 @app.route('/upload_wallpaper', methods=['POST'])
 def upload_wallpaper():
     if 'username' not in session:
         return jsonify({'ok': False})
-    file = request.files.get('file')
-    if not file:
-        return jsonify({'ok': False})
-    result = cloudinary.uploader.upload(file, folder='wallpapers')
-    url = result['secure_url']
+    data = request.json
     conn = get_db()
     cur = conn.cursor()
-    cur.execute('UPDATE users SET wallpaper_url=%s WHERE username=%s', (url, session['username']))
+    cur.execute('UPDATE users SET wallpaper_url=%s WHERE username=%s', (data['url'], session['username']))
     conn.commit()
     cur.close()
     conn.close()
-    return jsonify({'ok': True, 'url': url})
+    return jsonify({'ok': True})
 
 @app.route('/upload_media', methods=['POST'])
 def upload_media():
     if 'username' not in session:
         return jsonify({'ok': False})
-    file = request.files.get('file')
-    if not file:
-        return jsonify({'ok': False})
-    resource_type = 'video' if file.content_type.startswith('video') else 'image' if file.content_type.startswith('image') else 'raw'
-    result = cloudinary.uploader.upload(file, folder='chat_media', resource_type=resource_type)
-    return jsonify({'ok': True, 'url': result['secure_url'], 'type': resource_type})
+    data = request.json
+    return jsonify({'ok': True, 'url': data['url'], 'type': data['type']})
 
 @app.route('/users')
 def get_users():
