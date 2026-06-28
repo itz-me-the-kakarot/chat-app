@@ -128,7 +128,6 @@ async function initKeys() {
         await fetch('/save_key', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({key: pubStored}) });
       }
     }
-  }
   } else {
     const pair = await crypto.subtle.generateKey({ name: 'RSA-OAEP', modulusLength: 2048, publicExponent: new Uint8Array([1,0,1]), hash: 'SHA-256' }, true, ['encrypt','decrypt']);
     myPrivateKey = pair.privateKey;
