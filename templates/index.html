@@ -123,7 +123,12 @@ async function initKeys() {
     const pubStored = localStorage.getItem('pubkey_' + me);
     if (pubStored) {
       myPublicKey = await crypto.subtle.importKey('jwk', JSON.parse(pubStored), { name: 'RSA-OAEP', hash: 'SHA-256' }, false, ['encrypt']);
+      const check = await fetch('/pubkey/' + me).then(r=>r.json());
+      if (!check.key) {
+        await fetch('/save_key', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({key: pubStored}) });
+      }
     }
+  }
   } else {
     const pair = await crypto.subtle.generateKey({ name: 'RSA-OAEP', modulusLength: 2048, publicExponent: new Uint8Array([1,0,1]), hash: 'SHA-256' }, true, ['encrypt','decrypt']);
     myPrivateKey = pair.privateKey;
@@ -132,7 +137,14 @@ async function initKeys() {
     const pubJwk = await crypto.subtle.exportKey('jwk', pair.publicKey);
     localStorage.setItem('privkey_' + me, JSON.stringify(privJwk));
     localStorage.setItem('pubkey_' + me, JSON.stringify(pubJwk));
-    await fetch('/save_key', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({key: JSON.stringify(pubJwk)}) });
+    let saved = false;
+while (!saved) {
+  try {
+    const r = await fetch('/save_key', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({key: JSON.stringify(pubJwk)}) });
+    const d = await r.json();
+    if (d.ok) saved = true;
+  } catch(e) { await new Promise(r => setTimeout(r, 1000)); }
+}
   }
 }
 
