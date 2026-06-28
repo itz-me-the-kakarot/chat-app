@@ -284,5 +284,15 @@ def handle_private(data):
         emit('private_message', {'sender': sender, 'message': message}, to=connected_users[receiver])
     emit('private_message', {'sender': sender, 'message': message, 'plain': plain}, to=request.sid)
 
+@app.route('/clear_messages')
+def clear_messages():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('DELETE FROM messages')
+    conn.commit()
+    cur.close()
+    conn.close()
+    return 'done'
+
 if __name__ == '__main__':
     socketio.run(app, debug=True)
