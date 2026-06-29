@@ -447,10 +447,10 @@ function makeUserItem(u, mode) {
   const div = document.createElement('div');
   div.className = 'item';
   const badge = u.online ? '<div class="online-dot"></div>' : '';
-  const avC = u.avatar_url ? `<img src="${u.avatar_url}"/>` : (u.display_name||u.username)[0].toUpperCase();
+  const avC = u.avatar_url ? `<img src="${u.avatar_url}"/>` : (u.display_name||u.user_id)[0].toUpperCase();
   let action = '';
-  if (mode === 'add') action = `<button class="btn-xs btn-outline" onclick="addFriend('${u.username}')">Add</button>`;
-  if (mode === 'friend') action = `<button class="remove-btn" onclick="removeFriend(event,'${u.username}')">✕</button>`;
+  if (mode === 'add') action = `<button class="btn-xs btn-outline" onclick="addFriend('${u.user_id}')">Add</button>`;
+  if (mode === 'friend') action = `<button class="remove-btn" onclick="removeFriend(event,'${u.user_id}')">✕</button>`;
   div.innerHTML = `
     <div class="av av-md">${avC}${badge}</div>
     <div class="item-info">
