@@ -457,7 +457,7 @@ function makeUserItem(u, mode) {
       <div class="name">${u.display_name || u.username}</div>
       <div class="sub">#${u.user_id||'0000'} · ${u.online?'online':'offline'}</div>
     </div>${action}`;
-  if (mode === 'friend') div.onclick = e => { if (!e.target.classList.contains('remove-btn')) openChat(u.username); };
+  if (mode === 'friend') div.onclick = e => { if (!e.target.classList.contains('remove-btn')) openChat(u.user_id); };
   return div;
 }
 
