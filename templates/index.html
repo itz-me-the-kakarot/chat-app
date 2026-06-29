@@ -59,7 +59,11 @@
     .typing-bar { font-size:12px; color:#4f8ef7; padding:4px 14px; background:rgba(13,20,38,0.8); display:none; flex-shrink:0; }
 
     #messages { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:6px; list-style:none; scrollbar-width:thin; scrollbar-color:rgba(30,42,69,.5) transparent; }
-    #messages li { max-width:78%; padding:9px 13px; border-radius:18px; font-size:14px; line-height:1.5; animation:slideIn 0.2s ease; background:rgba(26,35,64,0.92); align-self:flex-start; border-bottom-left-radius:4px; word-break:break-word; position:relative; }
+    #messages li { max-width:78%; padding:9px 13px; border-radius:18px; font-size:14px; line-height:1.5; animation:slideIn 0.2s ease; background:rgba(26,35,64,0.92); align-self:flex-start; border-bottom-left-radius:4px; word-break:break-word; position:relative; touch-action:pan-y; transition:transform 0.25s cubic-bezier(.4,0,.2,1); }
+    #messages li .reply-drag-icon { position:absolute; top:50%; transform:translateY(-50%); font-size:20px; color:#4f8ef7; opacity:0; transition:opacity 0.15s; pointer-events:none; }
+    #messages li:not(.sent) .reply-drag-icon { left:-28px; }
+    #messages li.sent .reply-drag-icon { right:-28px; }
+    #messages li.dragging .reply-drag-icon { opacity:1; }
     #messages li .msender { font-size:11px; color:#4f8ef7; margin-bottom:3px; font-weight:600; }
     #messages li .reply-prev { background:rgba(0,0,0,.2); border-left:3px solid #4f8ef7; padding:3px 8px; border-radius:4px; font-size:12px; color:#a0aec0; margin-bottom:5px; }
     #messages li .reactions { display:flex; flex-wrap:wrap; gap:4px; margin-top:5px; }
@@ -83,9 +87,45 @@
     #msgInput { flex:1; background:#1a2340; border:1px solid #1e2a45; border-radius:24px; padding:12px 16px; color:#e8eaf0; font-family:'Inter',sans-serif; font-size:14px; outline:none; transition:border-color 0.2s; }
     #msgInput:focus { border-color:#4f8ef7; }
     #msgInput::placeholder { color:#4a5568; }
-    #sendBtn { width:44px; height:44px; border-radius:50%; background:linear-gradient(135deg,#4f8ef7,#3b6fd4); border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 0 12px rgba(79,142,247,.3); flex-shrink:0; }
-    #sendBtn svg { width:18px; height:18px; fill:white; }
+    #sendBtn, #micBtn { width:44px; height:44px; border-radius:50%; background:linear-gradient(135deg,#4f8ef7,#3b6fd4); border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 0 12px rgba(79,142,247,.3); flex-shrink:0; }
+    #sendBtn svg, #micBtn svg { width:18px; height:18px; fill:white; }
+    #micBtn { background:#1a2340; box-shadow:none; display:none; }
+    #micBtn.recording { background:linear-gradient(135deg,#f87171,#ef4444); box-shadow:0 0 12px rgba(248,113,113,.4); }
     #fileInput { display:none; }
+
+    /* Voice recording */
+    .voice-rec-bar { display:none; flex:1; align-items:center; gap:10px; background:#1a2340; border-radius:24px; padding:8px 14px; min-height:44px; }
+    .voice-rec-bar.active { display:flex; }
+    .voice-rec-bar .rec-dot { width:10px; height:10px; background:#f87171; border-radius:50%; animation:recPulse 1s infinite; flex-shrink:0; }
+    .voice-rec-bar .rec-dot.paused { animation:none; background:#4a5568; }
+    @keyframes recPulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+    .voice-rec-bar .rec-time { font-size:14px; font-variant-numeric:tabular-nums; color:#e8eaf0; min-width:36px; }
+    .voice-rec-bar .rec-hint { flex:1; font-size:12px; color:#4a5568; text-align:center; }
+    .voice-rec-bar .rec-hint.locked { color:#4f8ef7; }
+    .voice-rec-bar .voice-pause-btn, .voice-rec-bar .voice-cancel-btn { background:none; border:none; color:#a0aec0; font-size:20px; cursor:pointer; padding:4px; flex-shrink:0; }
+    .voice-rec-bar .voice-cancel-btn { color:#f87171; }
+    .voice-lock-indicator { position:absolute; right:60px; bottom:70px; background:#1a2340; border:1px solid #1e2a45; border-radius:12px; padding:8px 12px; font-size:12px; color:#4a5568; display:none; pointer-events:none; z-index:50; }
+    .voice-lock-indicator.show { display:block; }
+    .voice-lock-indicator.locked { color:#4f8ef7; border-color:#4f8ef7; }
+
+    /* Toast */
+    .toast { position:fixed; bottom:80px; left:50%; transform:translateX(-50%) translateY(20px); background:#1a2340; border:1px solid #1e2a45; color:#e8eaf0; padding:10px 20px; border-radius:12px; font-size:14px; z-index:300; opacity:0; transition:opacity 0.25s, transform 0.25s; pointer-events:none; }
+    .toast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+
+    /* Chat header tap area */
+    .chat-header-info { flex:1; min-width:0; cursor:pointer; display:flex; align-items:center; gap:10px; }
+    .chat-header-text { flex:1; min-width:0; }
+
+    /* Avatar crop modal */
+    .crop-modal { display:none; position:fixed; inset:0; background:#0a0f1e; z-index:400; flex-direction:column; }
+    .crop-modal.show { display:flex; }
+    .crop-header { padding:16px; background:#0d1426; border-bottom:1px solid #1e2a45; display:flex; align-items:center; justify-content:space-between; flex-shrink:0; }
+    .crop-header button { background:none; border:none; color:#4f8ef7; font-size:15px; cursor:pointer; font-family:'Inter',sans-serif; padding:4px 8px; }
+    .crop-header button.confirm { font-weight:600; }
+    .crop-header span { font-family:'Space Grotesk',sans-serif; font-size:16px; font-weight:600; }
+    .crop-viewport { flex:1; position:relative; overflow:hidden; touch-action:none; }
+    .crop-viewport canvas { position:absolute; top:0; left:0; }
+    .crop-frame { position:absolute; border:2px solid #fff; box-shadow:0 0 0 9999px rgba(0,0,0,.6); pointer-events:none; z-index:2; }
 
     /* Emoji picker */
     .emoji-picker { display:none; position:absolute; background:#1a2340; border:1px solid #1e2a45; border-radius:12px; padding:8px; gap:4px; flex-wrap:wrap; z-index:100; box-shadow:0 4px 20px rgba(0,0,0,.4); }
@@ -104,10 +144,7 @@
 
     /* Profile screen */
     #profileScreen { background:#0d1426; overflow-y:auto; }
-    .profile-cover { height:140px; background:linear-gradient(135deg,#1a2340,#0a0f1e); position:relative; overflow:hidden; flex-shrink:0; }
-    .profile-cover img { width:100%; height:100%; object-fit:cover; }
-    .cover-edit { position:absolute; bottom:8px; right:8px; background:rgba(0,0,0,.6); border:none; color:white; padding:5px 10px; border-radius:8px; font-size:12px; cursor:pointer; }
-    .profile-av-wrap { display:flex; justify-content:center; margin-top:-32px; position:relative; z-index:1; flex-shrink:0; }
+    .profile-av-wrap { display:flex; justify-content:center; margin-top:24px; position:relative; z-index:1; flex-shrink:0; }
     .profile-info { text-align:center; padding:10px 16px 16px; flex-shrink:0; }
     .profile-info h2 { font-family:'Space Grotesk',sans-serif; font-size:20px; font-weight:600; }
     .profile-info .uid { font-size:13px; color:#4f8ef7; margin-top:4px; }
@@ -131,7 +168,7 @@
     /* Chat settings */
     #chatSettingsScreen { background:#0d1426; overflow-y:auto; }
 
-    #avatarInput, #wallpaperInput, #chatWallInput, #fileInput { display:none; }
+    #avatarInput, #chatWallInput, #fileInput { display:none; }
   </style>
 </head>
 <body>
@@ -157,11 +194,16 @@
 <div id="chatScreen" class="screen">
   <div class="top-bar">
     <button class="back-btn" onclick="goBack()">&#8592;</button>
-    <div class="av av-md" id="chatAv" onclick="openChatProfile()"></div>
-    <div style="flex:1;min-width:0">
-      <div id="chatName" style="font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
-      <div id="chatStatus" style="font-size:12px;color:#4f8ef7;"></div>
+    <div class="chat-header-info" onclick="openChatProfile()">
+      <div class="av av-md" id="chatAv"></div>
+      <div class="chat-header-text">
+        <div id="chatName" style="font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
+        <div id="chatStatus" style="font-size:12px;color:#4f8ef7;"></div>
+      </div>
     </div>
+    <button class="icon-btn" onclick="showToast('Coming soon')" title="Call">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+    </button>
     <button class="icon-btn" onclick="showScreen('chatSettingsScreen')">⋮</button>
   </div>
   <div class="e2e">🔒 End-to-end encrypted</div>
@@ -172,14 +214,25 @@
       <span id="replyText"></span>
       <button class="x" onclick="cancelReply()">×</button>
     </div>
-    <div class="input-row">
+    <div class="input-row" id="inputRow">
       <button class="attach" onclick="document.getElementById('fileInput').click()">📎</button>
       <input type="file" id="fileInput" accept="image/*,video/*,audio/*,*/*" onchange="sendFile(this)"/>
       <input id="msgInput" type="text" placeholder="Message..." autocomplete="off"/>
+      <div class="voice-rec-bar" id="voiceRecBar">
+        <button class="voice-cancel-btn" id="voiceCancelBtn" onclick="cancelVoiceRec()" type="button">🗑</button>
+        <div class="rec-dot" id="recDot"></div>
+        <span class="rec-time" id="recTime">0:00</span>
+        <span class="rec-hint" id="recHint">Slide right to lock ›</span>
+        <button class="voice-pause-btn" id="voicePauseBtn" onclick="toggleVoicePause()" type="button" style="display:none">⏸</button>
+      </div>
+      <button id="micBtn" type="button">
+        <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-4.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+      </button>
       <button id="sendBtn" onclick="sendMsg()">
         <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
       </button>
     </div>
+    <div class="voice-lock-indicator" id="voiceLockHint">🔒 Slide right to lock</div>
   </div>
 </div>
 
@@ -188,9 +241,6 @@
   <div class="top-bar">
     <button class="back-btn" onclick="goBack()">&#8592;</button>
     <h2>Profile</h2>
-  </div>
-  <div class="profile-cover" id="profileCover">
-    <button class="cover-edit" onclick="document.getElementById('wallpaperInput').click()">Edit cover</button>
   </div>
   <div class="profile-av-wrap">
     <div class="av av-lg" id="profileAvBig" onclick="document.getElementById('avatarInput').click()"></div>
@@ -210,8 +260,20 @@
   <div class="psection">
     <button class="pbtn danger" onclick="window.location='/logout'"><span class="ico">🚪</span>Sign out</button>
   </div>
-  <input type="file" id="avatarInput" accept="image/*" onchange="uploadAvatar(this)"/>
-  <input type="file" id="wallpaperInput" accept="image/*" onchange="uploadWallpaper(this)"/>
+  <input type="file" id="avatarInput" accept="image/*" onchange="openAvatarCrop(this)"/>
+</div>
+
+<!-- Avatar crop -->
+<div class="crop-modal" id="cropModal">
+  <div class="crop-header">
+    <button onclick="cancelCrop()">Cancel</button>
+    <span>Crop Avatar</span>
+    <button class="confirm" onclick="confirmCrop()">Done</button>
+  </div>
+  <div class="crop-viewport" id="cropViewport">
+    <canvas id="cropCanvas"></canvas>
+    <div class="crop-frame" id="cropFrame"></div>
+  </div>
 </div>
 
 <!-- ── Chat Settings ── -->
@@ -254,6 +316,7 @@
 </div>
 
 <!-- Context menu -->
+<div class="toast" id="toast"></div>
 <div class="ctx-menu" id="ctxMenu">
   <div class="ctx-emojis" id="ctxEmojis"></div>
   <div class="ctx-item" onclick="ctxReply()">↩ Reply</div>
@@ -276,6 +339,16 @@ let replyingTo = null;
 let ctxMsgId = null, ctxMsgSender = null, ctxMsgText = null;
 let typingTimer = null;
 let screenStack = ['contactsScreen'];
+
+// ── Toast ─────────────────────────────────────────────────────
+let toastTimer = null;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+}
 
 const socket = io({ autoConnect: false });
 
@@ -372,9 +445,6 @@ async function loadProfile() {
   document.getElementById('profileUID').textContent = '#' + (myProfile.user_id || '0000');
   document.getElementById('profileUN').textContent = '@' + me;
   document.getElementById('newNameInput').value = myProfile.display_name || me;
-  if (myProfile.wallpaper_url) {
-    document.getElementById('profileCover').style.background = `url(${myProfile.wallpaper_url}) center/cover`;
-  }
 }
 
 async function saveName() {
@@ -385,8 +455,8 @@ async function saveName() {
   myProfile.display_name = name;
 }
 
-async function uploadAvatar(input) {
-  const file = input.files[0]; if (!file) return;
+async function uploadAvatarBlob(blob) {
+  const file = new File([blob], 'avatar.jpg', { type: 'image/jpeg' });
   const { url } = await cloudUpload(file);
   await fetch('/upload_avatar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
   const av = `<img src="${url}"/>`;
@@ -394,11 +464,100 @@ async function uploadAvatar(input) {
   document.getElementById('profileAvBig').innerHTML = av;
 }
 
-async function uploadWallpaper(input) {
-  const file = input.files[0]; if (!file) return;
-  const { url } = await cloudUpload(file);
-  await fetch('/upload_wallpaper', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) });
-  document.getElementById('profileCover').style.background = `url(${url}) center/cover`;
+// ── Avatar crop ───────────────────────────────────────────────
+let cropState = null;
+
+function openAvatarCrop(input) {
+  const file = input.files[0];
+  input.value = '';
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      const vp = document.getElementById('cropViewport');
+      const canvas = document.getElementById('cropCanvas');
+      const frame = document.getElementById('cropFrame');
+      const vw = vp.clientWidth;
+      const vh = vp.clientHeight;
+      const size = Math.min(vw, vh) * 0.75;
+      canvas.width = vw;
+      canvas.height = vh;
+      frame.style.width = size + 'px';
+      frame.style.height = size + 'px';
+      frame.style.left = (vw - size) / 2 + 'px';
+      frame.style.top = (vh - size) / 2 + 'px';
+      const scale = Math.max(size / img.width, size / img.height);
+      cropState = { img, canvas, vw, vh, size, scale, offsetX: (vw - img.width * scale) / 2, offsetY: (vh - img.height * scale) / 2, lastDist: 0, lastX: 0, lastY: 0, dragging: false, pinching: false };
+      drawCrop();
+      document.getElementById('cropModal').classList.add('show');
+      setupCropGestures(vp);
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function drawCrop() {
+  if (!cropState) return;
+  const { img, canvas, vw, vh, scale, offsetX, offsetY } = cropState;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, vw, vh);
+  ctx.drawImage(img, offsetX, offsetY, img.width * scale, img.height * scale);
+}
+
+function setupCropGestures(vp) {
+  vp.onmousedown = e => { if (e.button !== 0) return; cropState.dragging = true; cropState.lastX = e.clientX; cropState.lastY = e.clientY; };
+  vp.onmousemove = e => { if (!cropState?.dragging) return; cropState.offsetX += e.clientX - cropState.lastX; cropState.offsetY += e.clientY - cropState.lastY; cropState.lastX = e.clientX; cropState.lastY = e.clientY; drawCrop(); };
+  vp.onmouseup = () => { if (cropState) cropState.dragging = false; };
+  vp.onwheel = e => { e.preventDefault(); if (!cropState) return; const f = e.deltaY < 0 ? 1.08 : 0.92; const mx = e.clientX - vp.getBoundingClientRect().left; const my = e.clientY - vp.getBoundingClientRect().top; cropState.offsetX = mx - (mx - cropState.offsetX) * f; cropState.offsetY = my - (my - cropState.offsetY) * f; cropState.scale *= f; drawCrop(); };
+  vp.ontouchstart = e => {
+    if (e.touches.length === 1) { cropState.dragging = true; cropState.lastX = e.touches[0].clientX; cropState.lastY = e.touches[0].clientY; }
+    else if (e.touches.length === 2) { cropState.pinching = true; cropState.lastDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY); }
+  };
+  vp.ontouchmove = e => {
+    e.preventDefault();
+    if (!cropState) return;
+    if (e.touches.length === 1 && cropState.dragging && !cropState.pinching) {
+      cropState.offsetX += e.touches[0].clientX - cropState.lastX;
+      cropState.offsetY += e.touches[0].clientY - cropState.lastY;
+      cropState.lastX = e.touches[0].clientX;
+      cropState.lastY = e.touches[0].clientY;
+      drawCrop();
+    } else if (e.touches.length === 2) {
+      const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+      const cx = (e.touches[0].clientX + e.touches[1].clientX) / 2 - vp.getBoundingClientRect().left;
+      const cy = (e.touches[0].clientY + e.touches[1].clientY) / 2 - vp.getBoundingClientRect().top;
+      const f = dist / (cropState.lastDist || dist);
+      cropState.offsetX = cx - (cx - cropState.offsetX) * f;
+      cropState.offsetY = cy - (cy - cropState.offsetY) * f;
+      cropState.scale *= f;
+      cropState.lastDist = dist;
+      drawCrop();
+    }
+  };
+  vp.ontouchend = () => { if (cropState) { cropState.dragging = false; cropState.pinching = false; cropState.lastDist = 0; } };
+}
+
+function cancelCrop() {
+  document.getElementById('cropModal').classList.remove('show');
+  cropState = null;
+}
+
+async function confirmCrop() {
+  if (!cropState) return;
+  const { canvas, vw, vh, size } = cropState;
+  const fx = (vw - size) / 2;
+  const fy = (vh - size) / 2;
+  const out = document.createElement('canvas');
+  out.width = 512;
+  out.height = 512;
+  const ctx = out.getContext('2d');
+  ctx.drawImage(canvas, fx, fy, size, size, 0, 0, 512, 512);
+  out.toBlob(async blob => {
+    cancelCrop();
+    if (blob) await uploadAvatarBlob(blob);
+  }, 'image/jpeg', 0.92);
 }
 
 // ── Tabs ──────────────────────────────────────────────────────
@@ -487,6 +646,7 @@ async function openChat(username) {
   document.getElementById('messages').innerHTML = '';
   document.getElementById('csName').textContent = username;
   cancelReply();
+  cancelVoiceRec();
   showScreen('chatScreen');
 
   // Avatar
@@ -528,6 +688,10 @@ async function renderMsg(m, isSent, prepend = false) {
   } else if (m.msg_type === 'image') {
     html += `<img src="${m.media_url}" class="cmedia" onclick="window.open('${m.media_url}','_blank')"/>
       <a href="${m.media_url}" download class="dload">⬇ Save image</a>`;
+  } else if (m.msg_type === 'voice') {
+    html += `<audio src="${m.media_url}" controls style="max-width:220px;margin-top:4px;"></audio>`;
+  } else if (m.msg_type === 'video' && m.media_url && /\.(webm|ogg|mp3|m4a|wav)(\?|$)/i.test(m.media_url)) {
+    html += `<audio src="${m.media_url}" controls style="max-width:220px;margin-top:4px;"></audio>`;
   } else if (m.msg_type === 'video') {
     html += `<video src="${m.media_url}" class="cmedia" controls></video>
       <a href="${m.media_url}" download class="dload">⬇ Save video</a>`;
@@ -552,30 +716,91 @@ async function renderMsg(m, isSent, prepend = false) {
     html += `<div class="ticks ${m.seen ? 'seen' : ''}">${m.seen ? '✓✓' : '✓'}</div>`;
   }
 
-  li.innerHTML = html;
+  li.innerHTML = '<div class="reply-drag-icon">↩</div>' + html;
 
-  // Long press → context menu
-  let pressTimer;
+  // Long press → context menu + drag-to-reply
+  let pressTimer, dragStartX = 0, dragging = false, dragTriggered = false;
+  const threshold = 60;
+
   li.addEventListener('touchstart', e => {
-    pressTimer = setTimeout(() => showCtxMenu(e, m, isSent), 500);
-    startX = e.touches[0].clientX;
-  });
+    if (e.touches.length !== 1) return;
+    dragStartX = e.touches[0].clientX;
+    dragging = false;
+    dragTriggered = false;
+    pressTimer = setTimeout(() => { if (!dragging) showCtxMenu(e, m, isSent); }, 500);
+  }, { passive: true });
+
+  li.addEventListener('touchmove', e => {
+    if (e.touches.length !== 1) return;
+    clearTimeout(pressTimer);
+    const diff = e.touches[0].clientX - dragStartX;
+    const valid = isSent ? diff < 0 : diff > 0;
+    if (!valid) { li.style.transform = ''; li.classList.remove('dragging'); dragging = false; return; }
+    dragging = true;
+    const clamped = isSent ? Math.max(diff, -threshold * 1.2) : Math.min(diff, threshold * 1.2);
+    li.style.transform = `translateX(${clamped}px)`;
+    li.classList.add('dragging');
+    if (Math.abs(diff) >= threshold) dragTriggered = true;
+  }, { passive: true });
+
   li.addEventListener('touchend', e => {
     clearTimeout(pressTimer);
-    const diff = e.changedTouches[0].clientX - startX;
-    if (diff > 60) {
-      const text = li.querySelector('span') ? li.querySelector('span').textContent : '[media]';
+    li.classList.remove('dragging');
+    li.style.transform = '';
+    if (dragging && dragTriggered) {
+      const text = li.querySelector('span:not(.del-text)') ? li.querySelector('span:not(.del-text)').textContent : (m.msg_type === 'image' ? '[image]' : m.msg_type === 'video' ? '[media]' : '[message]');
+      setReply(text);
+    }
+    dragging = false;
+  }, { passive: true });
+
+  li.addEventListener('touchcancel', () => {
+    clearTimeout(pressTimer);
+    li.classList.remove('dragging');
+    li.style.transform = '';
+    dragging = false;
+  }, { passive: true });
+
+  // Mouse drag-to-reply (desktop)
+  let mouseDown = false, mouseStartX = 0;
+  li.addEventListener('mousedown', e => {
+    if (e.button !== 0) return;
+    mouseDown = true;
+    mouseStartX = e.clientX;
+    dragTriggered = false;
+  });
+  li.addEventListener('mousemove', e => {
+    if (!mouseDown) return;
+    const diff = e.clientX - mouseStartX;
+    const valid = isSent ? diff < 0 : diff > 0;
+    if (!valid) { li.style.transform = ''; li.classList.remove('dragging'); return; }
+    const clamped = isSent ? Math.max(diff, -threshold * 1.2) : Math.min(diff, threshold * 1.2);
+    li.style.transform = `translateX(${clamped}px)`;
+    li.classList.add('dragging');
+    if (Math.abs(diff) >= threshold) dragTriggered = true;
+  });
+  li.addEventListener('mouseup', () => {
+    if (!mouseDown) return;
+    mouseDown = false;
+    li.classList.remove('dragging');
+    li.style.transform = '';
+    if (dragTriggered) {
+      const text = li.querySelector('span:not(.del-text)') ? li.querySelector('span:not(.del-text)').textContent : '[message]';
       setReply(text);
     }
   });
-  li.addEventListener('touchmove', () => clearTimeout(pressTimer));
+  li.addEventListener('mouseleave', () => {
+    if (!mouseDown) return;
+    mouseDown = false;
+    li.classList.remove('dragging');
+    li.style.transform = '';
+  });
 
   if (prepend) ul.prepend(li); else ul.appendChild(li);
   if (!prepend) li.scrollIntoView({ behavior: 'smooth' });
 }
 
 // ── Context menu ──────────────────────────────────────────────
-let startX = 0;
 const EMOJIS = ['❤️','😂','😮','😢','👍','🔥'];
 
 function showCtxMenu(e, m, isSent) {
@@ -666,6 +891,155 @@ async function sendFile(input) {
   cancelReply();
   input.value = '';
 }
+
+// ── Voice messages ────────────────────────────────────────────
+let voiceRec = null, voiceChunks = [], voiceStream = null, voiceLocked = false, voicePaused = false;
+let voiceStartTime = 0, voiceTimerInterval = null, voiceMicStartX = 0, voiceMicActive = false;
+
+function updateSendMic() {
+  const hasText = document.getElementById('msgInput').value.trim().length > 0;
+  document.getElementById('sendBtn').style.display = (hasText || voiceLocked) ? 'flex' : 'none';
+  document.getElementById('micBtn').style.display = (!hasText && !voiceLocked) ? 'flex' : 'none';
+  document.getElementById('sendBtn').onclick = voiceLocked ? sendVoiceMsg : sendMsg;
+}
+
+function formatRecTime(ms) {
+  const s = Math.floor(ms / 1000);
+  return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+}
+
+function showVoiceUI(locked) {
+  document.getElementById('msgInput').style.display = 'none';
+  document.getElementById('micBtn').style.display = 'none';
+  document.getElementById('voiceRecBar').classList.add('active');
+  document.getElementById('voiceCancelBtn').style.display = locked ? 'block' : 'none';
+  document.getElementById('voicePauseBtn').style.display = locked ? 'block' : 'none';
+  document.getElementById('recHint').textContent = locked ? 'Recording locked' : 'Slide right to lock ›';
+  document.getElementById('recHint').classList.toggle('locked', locked);
+  document.getElementById('voiceLockHint').classList.toggle('show', !locked);
+  document.getElementById('micBtn').classList.add('recording');
+  updateSendMic();
+}
+
+function hideVoiceUI() {
+  document.getElementById('msgInput').style.display = '';
+  document.getElementById('voiceRecBar').classList.remove('active');
+  document.getElementById('voiceLockHint').classList.remove('show');
+  document.getElementById('micBtn').classList.remove('recording');
+  document.getElementById('recDot').classList.remove('paused');
+  document.getElementById('voicePauseBtn').textContent = '⏸';
+  document.getElementById('recTime').textContent = '0:00';
+  clearInterval(voiceTimerInterval);
+  voiceTimerInterval = null;
+  voiceLocked = false;
+  voicePaused = false;
+  voiceMicActive = false;
+  updateSendMic();
+}
+
+async function startVoiceRec() {
+  if (!currentChat || voiceRec) return;
+  try {
+    voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch { showToast('Microphone access denied'); return; }
+  voiceChunks = [];
+  const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg';
+  voiceRec = new MediaRecorder(voiceStream, { mimeType: mime });
+  voiceRec.ondataavailable = e => { if (e.data.size) voiceChunks.push(e.data); };
+  voiceRec.onstop = () => { if (voiceStream) { voiceStream.getTracks().forEach(t => t.stop()); voiceStream = null; } };
+  voiceRec.start(100);
+  voiceStartTime = Date.now();
+  voiceMicActive = true;
+  voiceTimerInterval = setInterval(() => {
+    if (!voicePaused) document.getElementById('recTime').textContent = formatRecTime(Date.now() - voiceStartTime);
+  }, 200);
+  showVoiceUI(false);
+}
+
+function resetVoiceRec() {
+  if (voiceRec && voiceRec.state !== 'inactive') voiceRec.stop();
+  voiceRec = null;
+  voiceChunks = [];
+  hideVoiceUI();
+}
+
+function cancelVoiceRec() {
+  resetVoiceRec();
+}
+
+function toggleVoicePause() {
+  if (!voiceRec || !voiceLocked) return;
+  if (voicePaused) {
+    voiceRec.resume();
+    voicePaused = false;
+    document.getElementById('recDot').classList.remove('paused');
+    document.getElementById('voicePauseBtn').textContent = '⏸';
+  } else {
+    voiceRec.pause();
+    voicePaused = true;
+    document.getElementById('recDot').classList.add('paused');
+    document.getElementById('voicePauseBtn').textContent = '▶';
+  }
+}
+
+function lockVoiceRec() {
+  if (!voiceRec) return;
+  voiceLocked = true;
+  document.getElementById('voiceLockHint').classList.remove('show');
+  showVoiceUI(true);
+}
+
+async function sendVoiceMsg() {
+  const rec = voiceRec;
+  if (!rec && !voiceChunks.length) return;
+  if (rec && rec.state !== 'inactive') {
+    await new Promise(resolve => { rec.addEventListener('stop', resolve, { once: true }); rec.stop(); });
+  }
+  const chunks = voiceChunks.slice();
+  voiceRec = null;
+  voiceChunks = [];
+  hideVoiceUI();
+  if (!chunks.length || !currentChat) return;
+  const blob = new Blob(chunks, { type: chunks[0].type || 'audio/webm' });
+  if (blob.size < 500) return;
+  const file = new File([blob], 'voice.webm', { type: blob.type });
+  const { url } = await cloudUpload(file);
+  socket.emit('private_message', { receiver: currentChat, message: '', sender_message: '', msg_type: 'voice', media_url: url, reply_to: replyingTo || '' });
+  cancelReply();
+}
+
+(function initVoiceMic() {
+  const mic = document.getElementById('micBtn');
+  mic.addEventListener('touchstart', e => {
+    e.preventDefault();
+    voiceMicStartX = e.touches[0].clientX;
+    startVoiceRec();
+  }, { passive: false });
+  mic.addEventListener('touchmove', e => {
+    if (!voiceRec || voiceLocked) return;
+    if (e.touches[0].clientX - voiceMicStartX > 70) lockVoiceRec();
+  }, { passive: true });
+  mic.addEventListener('touchend', e => {
+    if (!voiceRec || voiceLocked) return;
+    e.preventDefault();
+    if (Date.now() - voiceStartTime < 500) cancelVoiceRec();
+    else sendVoiceMsg();
+  }, { passive: false });
+  mic.addEventListener('mousedown', e => {
+    e.preventDefault();
+    voiceMicStartX = e.clientX;
+    startVoiceRec();
+  });
+  document.addEventListener('mousemove', e => {
+    if (!voiceMicActive || !voiceRec || voiceLocked) return;
+    if (e.clientX - voiceMicStartX > 70) lockVoiceRec();
+  });
+  document.addEventListener('mouseup', () => {
+    if (!voiceMicActive || voiceLocked) return;
+    if (Date.now() - voiceStartTime < 500) cancelVoiceRec();
+    else sendVoiceMsg();
+  });
+})();
 
 // ── Chat settings ─────────────────────────────────────────────
 async function setChatWallpaper(input) {
@@ -778,6 +1152,7 @@ socket.on('user_list_update', users => {
 
 // Typing indicator emit
 document.getElementById('msgInput').addEventListener('input', () => {
+  updateSendMic();
   if (!currentChat) return;
   socket.emit('typing', { receiver: currentChat, typing: true });
   clearTimeout(typingTimer);
@@ -785,6 +1160,7 @@ document.getElementById('msgInput').addEventListener('input', () => {
 });
 
 document.getElementById('msgInput').addEventListener('keydown', e => { if (e.key === 'Enter') sendMsg(); });
+updateSendMic();
 
 // ── Init ──────────────────────────────────────────────────────
 initKeys().then(async () => {
