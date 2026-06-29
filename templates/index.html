@@ -81,32 +81,76 @@
 
     .reply-bar { background:#1a2340; border-left:3px solid #4f8ef7; padding:8px 36px 8px 12px; font-size:13px; color:#a0aec0; display:none; flex-shrink:0; position:relative; }
     .reply-bar .x { position:absolute; right:10px; top:50%; transform:translateY(-50%); background:none; border:none; color:#f87171; font-size:18px; cursor:pointer; }
-    .input-row { padding:10px 12px; border-top:1px solid #1e2a45; display:flex; gap:8px; align-items:center; background:#0d1426; flex-shrink:0; }
-    .attach { background:none; border:none; color:#4a5568; font-size:22px; cursor:pointer; }
-    .attach:hover { color:#4f8ef7; }
-    #msgInput { flex:1; background:#1a2340; border:1px solid #1e2a45; border-radius:24px; padding:12px 16px; color:#e8eaf0; font-family:'Inter',sans-serif; font-size:14px; outline:none; transition:border-color 0.2s; }
+
+    /* ── Instagram-style input bar ── */
+    .input-row { padding:8px 10px; border-top:1px solid #1e2a45; display:flex; gap:6px; align-items:center; background:#0d1426; flex-shrink:0; position:relative; }
+    /* camera left */
+    .cam-btn { background:none; border:none; color:#a0aec0; cursor:pointer; padding:4px 6px; flex-shrink:0; display:flex; align-items:center; transition:color 0.2s; }
+    .cam-btn:hover { color:#4f8ef7; }
+    .cam-btn svg { width:26px; height:26px; }
+    /* text input */
+    #msgInput { flex:1; background:#1a2340; border:1px solid #1e2a45; border-radius:24px; padding:11px 16px; color:#e8eaf0; font-family:'Inter',sans-serif; font-size:14px; outline:none; transition:border-color 0.2s; min-width:0; }
     #msgInput:focus { border-color:#4f8ef7; }
     #msgInput::placeholder { color:#4a5568; }
-    #sendBtn, #micBtn { width:44px; height:44px; border-radius:50%; background:linear-gradient(135deg,#4f8ef7,#3b6fd4); border:none; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 0 12px rgba(79,142,247,.3); flex-shrink:0; }
-    #sendBtn svg, #micBtn svg { width:18px; height:18px; fill:white; }
-    #micBtn { background:#1a2340; box-shadow:none; display:none; }
-    #micBtn.recording { background:linear-gradient(135deg,#f87171,#ef4444); box-shadow:0 0 12px rgba(248,113,113,.4); }
-    #fileInput { display:none; }
+    /* right icon group */
+    .right-icons { display:flex; gap:2px; align-items:center; flex-shrink:0; }
+    .rib { background:none; border:none; color:#a0aec0; cursor:pointer; width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center; transition:color 0.2s, background 0.2s; flex-shrink:0; }
+    .rib:hover { color:#e8eaf0; background:rgba(255,255,255,.06); }
+    .rib svg { width:22px; height:22px; }
+    /* mic hold state */
+    #micBtn { position:relative; transition:transform 0.15s, background 0.2s; touch-action:none; user-select:none; -webkit-user-select:none; }
+    #micBtn.recording { color:#f87171; animation:micPulse 1s infinite; }
+    @keyframes micPulse { 0%,100%{opacity:1} 50%{opacity:.6} }
+    /* plus/send btn */
+    #plusSendBtn { transition:color 0.2s, transform 0.2s; }
+    #plusSendBtn.is-send { color:#4f8ef7; }
+    /* hidden file inputs */
+    #fileInput, #galleryInput, #cameraInput { display:none; }
 
-    /* Voice recording */
-    .voice-rec-bar { display:none; flex:1; align-items:center; gap:10px; background:#1a2340; border-radius:24px; padding:8px 14px; min-height:44px; }
-    .voice-rec-bar.active { display:flex; }
-    .voice-rec-bar .rec-dot { width:10px; height:10px; background:#f87171; border-radius:50%; animation:recPulse 1s infinite; flex-shrink:0; }
-    .voice-rec-bar .rec-dot.paused { animation:none; background:#4a5568; }
-    @keyframes recPulse { 0%,100%{opacity:1} 50%{opacity:.3} }
-    .voice-rec-bar .rec-time { font-size:14px; font-variant-numeric:tabular-nums; color:#e8eaf0; min-width:36px; }
-    .voice-rec-bar .rec-hint { flex:1; font-size:12px; color:#4a5568; text-align:center; }
-    .voice-rec-bar .rec-hint.locked { color:#4f8ef7; }
-    .voice-rec-bar .voice-pause-btn, .voice-rec-bar .voice-cancel-btn { background:none; border:none; color:#a0aec0; font-size:20px; cursor:pointer; padding:4px; flex-shrink:0; }
-    .voice-rec-bar .voice-cancel-btn { color:#f87171; }
-    .voice-lock-indicator { position:absolute; right:60px; bottom:70px; background:#1a2340; border:1px solid #1e2a45; border-radius:12px; padding:8px 12px; font-size:12px; color:#4a5568; display:none; pointer-events:none; z-index:50; }
-    .voice-lock-indicator.show { display:block; }
-    .voice-lock-indicator.locked { color:#4f8ef7; border-color:#4f8ef7; }
+    /* ── Voice recording overlay ── */
+    /* The entire input-row morphs during recording */
+    .input-row.recording-mode .cam-btn,
+    .input-row.recording-mode #msgInput,
+    .input-row.recording-mode .rib:not(#micBtn):not(#voiceSendBtn):not(#voiceCancelBtnR) { display:none; }
+    .input-row.recording-mode .right-icons { display:none; }
+    /* voice bar that replaces the input content */
+    #voiceBar { display:none; flex:1; align-items:center; gap:8px; min-width:0; }
+    .input-row.recording-mode #voiceBar { display:flex; }
+    /* cancel (trash) on left of voice bar */
+    #voiceTrash { background:none; border:none; color:#f87171; font-size:20px; cursor:pointer; padding:4px 6px; flex-shrink:0; }
+    /* waveform */
+    .waveform { flex:1; display:flex; align-items:center; gap:2px; height:32px; min-width:0; overflow:hidden; }
+    .waveform .wb { width:3px; border-radius:2px; background:#4f8ef7; animation:waveAnim 0.8s ease-in-out infinite; flex-shrink:0; }
+    .waveform .wb:nth-child(1) { animation-delay:0s; }
+    .waveform .wb:nth-child(2) { animation-delay:0.1s; }
+    .waveform .wb:nth-child(3) { animation-delay:0.2s; }
+    .waveform .wb:nth-child(4) { animation-delay:0.3s; }
+    .waveform .wb:nth-child(5) { animation-delay:0.4s; }
+    .waveform .wb:nth-child(6) { animation-delay:0.5s; }
+    .waveform .wb:nth-child(7) { animation-delay:0.6s; }
+    .waveform .wb:nth-child(8) { animation-delay:0.7s; }
+    .waveform .wb:nth-child(9) { animation-delay:0.15s; }
+    .waveform .wb:nth-child(10) { animation-delay:0.35s; }
+    .waveform .wb:nth-child(11) { animation-delay:0.55s; }
+    .waveform .wb:nth-child(12) { animation-delay:0.25s; }
+    @keyframes waveAnim { 0%,100%{height:4px;opacity:.4} 50%{height:22px;opacity:1} }
+    .waveform.paused .wb { animation:none; height:6px; opacity:.4; }
+    #recTime { font-size:13px; font-variant-numeric:tabular-nums; color:#e8eaf0; min-width:34px; flex-shrink:0; }
+    /* pause/resume in locked mode */
+    #voicePauseBtn { background:none; border:none; color:#a0aec0; font-size:18px; cursor:pointer; padding:4px; flex-shrink:0; display:none; }
+    /* send btn in voice mode (right of bar) */
+    #voiceSendBtn { width:40px; height:40px; border-radius:50%; background:linear-gradient(135deg,#4f8ef7,#3b6fd4); border:none; cursor:pointer; display:none; align-items:center; justify-content:center; flex-shrink:0; box-shadow:0 0 10px rgba(79,142,247,.35); }
+    #voiceSendBtn svg { width:18px; height:18px; fill:white; }
+    .input-row.recording-mode #voiceSendBtn { display:flex; }
+    /* floating gesture hints above mic */
+    #voiceGestureHint { position:absolute; bottom:70px; right:10px; pointer-events:none; z-index:60; display:none; flex-direction:column; align-items:center; gap:6px; }
+    #voiceGestureHint.show { display:flex; }
+    .vgh-lock { background:#1a2340; border:1px solid #4f8ef7; border-radius:20px; padding:6px 12px; font-size:12px; color:#4f8ef7; display:flex; align-items:center; gap:4px; white-space:nowrap; transition:transform 0.15s; }
+    .vgh-lock.active { background:#4f8ef7; color:#fff; transform:scale(1.05); }
+    .vgh-cancel { background:#1a2340; border:1px solid #f87171; border-radius:20px; padding:6px 12px; font-size:12px; color:#f87171; display:flex; align-items:center; gap:4px; white-space:nowrap; }
+    /* slide hint on the input row level */
+    #voiceSlideHint { position:absolute; left:50%; transform:translateX(-50%); bottom:70px; background:rgba(26,35,64,.95); border:1px solid #1e2a45; border-radius:12px; padding:7px 14px; font-size:12px; color:#4a5568; display:none; pointer-events:none; z-index:55; white-space:nowrap; }
+    #voiceSlideHint.show { display:block; }
 
     /* Toast */
     .toast { position:fixed; bottom:80px; left:50%; transform:translateX(-50%) translateY(20px); background:#1a2340; border:1px solid #1e2a45; color:#e8eaf0; padding:10px 20px; border-radius:12px; font-size:14px; z-index:300; opacity:0; transition:opacity 0.25s, transform 0.25s; pointer-events:none; }
@@ -215,24 +259,75 @@
       <button class="x" onclick="cancelReply()">×</button>
     </div>
     <div class="input-row" id="inputRow">
-      <button class="attach" onclick="document.getElementById('fileInput').click()">📎</button>
-      <input type="file" id="fileInput" accept="image/*,video/*,audio/*,*/*" onchange="sendFile(this)"/>
+      <!-- Camera left -->
+      <button class="cam-btn" onclick="document.getElementById('cameraInput').click()" title="Camera">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+          <circle cx="12" cy="13" r="4"/>
+        </svg>
+      </button>
+      <input type="file" id="cameraInput" accept="image/*" capture="environment" onchange="sendFile(this)"/>
+      <input type="file" id="galleryInput" accept="image/*,video/*" onchange="sendFile(this)"/>
+      <input type="file" id="fileInput" accept="*/*" onchange="sendFile(this)"/>
+
+      <!-- Text input -->
       <input id="msgInput" type="text" placeholder="Message..." autocomplete="off"/>
-      <div class="voice-rec-bar" id="voiceRecBar">
-        <button class="voice-cancel-btn" id="voiceCancelBtn" onclick="cancelVoiceRec()" type="button">🗑</button>
-        <div class="rec-dot" id="recDot"></div>
-        <span class="rec-time" id="recTime">0:00</span>
-        <span class="rec-hint" id="recHint">Slide right to lock ›</span>
-        <button class="voice-pause-btn" id="voicePauseBtn" onclick="toggleVoicePause()" type="button" style="display:none">⏸</button>
+
+      <!-- Voice bar (replaces everything in recording mode) -->
+      <div id="voiceBar">
+        <button id="voiceTrash" onclick="cancelVoiceRec()" type="button" title="Delete">🗑️</button>
+        <div class="waveform" id="waveform">
+          <div class="wb"></div><div class="wb"></div><div class="wb"></div>
+          <div class="wb"></div><div class="wb"></div><div class="wb"></div>
+          <div class="wb"></div><div class="wb"></div><div class="wb"></div>
+          <div class="wb"></div><div class="wb"></div><div class="wb"></div>
+        </div>
+        <span id="recTime">0:00</span>
+        <button id="voicePauseBtn" onclick="toggleVoicePause()" type="button">⏸</button>
+        <button id="voiceSendBtn" onclick="sendVoiceMsg()" type="button">
+          <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+        </button>
       </div>
-      <button id="micBtn" type="button">
-        <svg viewBox="0 0 24 24"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-4.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
-      </button>
-      <button id="sendBtn" onclick="sendMsg()">
-        <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
-      </button>
+
+      <!-- Right icons -->
+      <div class="right-icons" id="rightIcons">
+        <button class="rib" id="micBtn" type="button" title="Hold to record">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-4.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+          </svg>
+        </button>
+        <button class="rib" onclick="document.getElementById('galleryInput').click()" title="Gallery">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="18" height="18" rx="2"/>
+            <circle cx="8.5" cy="8.5" r="1.5"/>
+            <polyline points="21 15 16 10 5 21"/>
+          </svg>
+        </button>
+        <button class="rib" onclick="document.getElementById('fileInput').click()" title="File">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+            <polyline points="14 2 14 8 20 8"/>
+          </svg>
+        </button>
+        <button class="rib" id="plusSendBtn" onclick="handlePlusSend()" title="More">
+          <!-- Plus icon (default) -->
+          <svg id="plusIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="16"/>
+            <line x1="8" y1="12" x2="16" y2="12"/>
+          </svg>
+          <!-- Send icon (when typing) -->
+          <svg id="sendIcon" viewBox="0 0 24 24" fill="currentColor" style="display:none">
+            <path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/>
+          </svg>
+        </button>
+      </div>
     </div>
-    <div class="voice-lock-indicator" id="voiceLockHint">🔒 Slide right to lock</div>
+    <!-- Floating gesture hints during hold-to-record -->
+    <div id="voiceGestureHint">
+      <div class="vgh-lock" id="vghLock">🔒 Slide up to lock</div>
+      <div class="vgh-cancel" id="vghCancel">🗑 Slide left to cancel</div>
+    </div>
   </div>
 </div>
 
@@ -894,13 +989,29 @@ async function sendFile(input) {
 
 // ── Voice messages ────────────────────────────────────────────
 let voiceRec = null, voiceChunks = [], voiceStream = null, voiceLocked = false, voicePaused = false;
-let voiceStartTime = 0, voiceTimerInterval = null, voiceMicStartX = 0, voiceMicActive = false;
+let voiceStartTime = 0, voiceElapsed = 0, voiceTimerInterval = null;
+let voiceMicStartX = 0, voiceMicStartY = 0, voiceMicActive = false;
 
-function updateSendMic() {
+function updateInputUI() {
   const hasText = document.getElementById('msgInput').value.trim().length > 0;
-  document.getElementById('sendBtn').style.display = (hasText || voiceLocked) ? 'flex' : 'none';
-  document.getElementById('micBtn').style.display = (!hasText && !voiceLocked) ? 'flex' : 'none';
-  document.getElementById('sendBtn').onclick = voiceLocked ? sendVoiceMsg : sendMsg;
+  const plusSend = document.getElementById('plusSendBtn');
+  const plusIcon = document.getElementById('plusIcon');
+  const sendIcon = document.getElementById('sendIcon');
+  if (hasText) {
+    plusSend.classList.add('is-send');
+    plusIcon.style.display = 'none';
+    sendIcon.style.display = 'block';
+  } else {
+    plusSend.classList.remove('is-send');
+    plusIcon.style.display = 'block';
+    sendIcon.style.display = 'none';
+  }
+}
+
+function handlePlusSend() {
+  const hasText = document.getElementById('msgInput').value.trim().length > 0;
+  if (hasText) sendMsg();
+  else showToast('Coming soon');
 }
 
 function formatRecTime(ms) {
@@ -908,33 +1019,30 @@ function formatRecTime(ms) {
   return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
 }
 
-function showVoiceUI(locked) {
-  document.getElementById('msgInput').style.display = 'none';
-  document.getElementById('micBtn').style.display = 'none';
-  document.getElementById('voiceRecBar').classList.add('active');
-  document.getElementById('voiceCancelBtn').style.display = locked ? 'block' : 'none';
-  document.getElementById('voicePauseBtn').style.display = locked ? 'block' : 'none';
-  document.getElementById('recHint').textContent = locked ? 'Recording locked' : 'Slide right to lock ›';
-  document.getElementById('recHint').classList.toggle('locked', locked);
-  document.getElementById('voiceLockHint').classList.toggle('show', !locked);
-  document.getElementById('micBtn').classList.add('recording');
-  updateSendMic();
+function enterRecordingMode(locked) {
+  const row = document.getElementById('inputRow');
+  row.classList.add('recording-mode');
+  document.getElementById('voiceGestureHint').classList.toggle('show', !locked);
+  document.getElementById('voicePauseBtn').style.display = locked ? 'inline-flex' : 'none';
+  const waveform = document.getElementById('waveform');
+  waveform.classList.toggle('paused', false);
+  voiceLocked = locked;
 }
 
-function hideVoiceUI() {
-  document.getElementById('msgInput').style.display = '';
-  document.getElementById('voiceRecBar').classList.remove('active');
-  document.getElementById('voiceLockHint').classList.remove('show');
-  document.getElementById('micBtn').classList.remove('recording');
-  document.getElementById('recDot').classList.remove('paused');
-  document.getElementById('voicePauseBtn').textContent = '⏸';
+function exitRecordingMode() {
+  const row = document.getElementById('inputRow');
+  row.classList.remove('recording-mode');
+  document.getElementById('voiceGestureHint').classList.remove('show');
   document.getElementById('recTime').textContent = '0:00';
+  document.getElementById('voicePauseBtn').textContent = '⏸';
+  document.getElementById('voicePauseBtn').style.display = 'none';
+  document.getElementById('waveform').classList.remove('paused');
   clearInterval(voiceTimerInterval);
   voiceTimerInterval = null;
   voiceLocked = false;
   voicePaused = false;
   voiceMicActive = false;
-  updateSendMic();
+  voiceElapsed = 0;
 }
 
 async function startVoiceRec() {
@@ -949,18 +1057,24 @@ async function startVoiceRec() {
   voiceRec.onstop = () => { if (voiceStream) { voiceStream.getTracks().forEach(t => t.stop()); voiceStream = null; } };
   voiceRec.start(100);
   voiceStartTime = Date.now();
+  voiceElapsed = 0;
   voiceMicActive = true;
+  document.getElementById('micBtn').classList.add('recording');
   voiceTimerInterval = setInterval(() => {
-    if (!voicePaused) document.getElementById('recTime').textContent = formatRecTime(Date.now() - voiceStartTime);
+    if (!voicePaused) {
+      voiceElapsed = Date.now() - voiceStartTime;
+      document.getElementById('recTime').textContent = formatRecTime(voiceElapsed);
+    }
   }, 200);
-  showVoiceUI(false);
+  enterRecordingMode(false);
 }
 
 function resetVoiceRec() {
   if (voiceRec && voiceRec.state !== 'inactive') voiceRec.stop();
   voiceRec = null;
   voiceChunks = [];
-  hideVoiceUI();
+  document.getElementById('micBtn').classList.remove('recording');
+  exitRecordingMode();
 }
 
 function cancelVoiceRec() {
@@ -972,12 +1086,13 @@ function toggleVoicePause() {
   if (voicePaused) {
     voiceRec.resume();
     voicePaused = false;
-    document.getElementById('recDot').classList.remove('paused');
+    voiceStartTime = Date.now() - voiceElapsed; // adjust so timer continues from where it was
+    document.getElementById('waveform').classList.remove('paused');
     document.getElementById('voicePauseBtn').textContent = '⏸';
   } else {
     voiceRec.pause();
     voicePaused = true;
-    document.getElementById('recDot').classList.add('paused');
+    document.getElementById('waveform').classList.add('paused');
     document.getElementById('voicePauseBtn').textContent = '▶';
   }
 }
@@ -985,8 +1100,14 @@ function toggleVoicePause() {
 function lockVoiceRec() {
   if (!voiceRec) return;
   voiceLocked = true;
-  document.getElementById('voiceLockHint').classList.remove('show');
-  showVoiceUI(true);
+  document.getElementById('voiceGestureHint').classList.remove('show');
+  document.getElementById('micBtn').classList.remove('recording');
+  document.getElementById('voicePauseBtn').style.display = 'inline-flex';
+  // show vgh-lock as active briefly
+  const lk = document.getElementById('vghLock');
+  lk.classList.add('active');
+  setTimeout(() => lk.classList.remove('active'), 400);
+  showToast('🔒 Locked — recording hands-free');
 }
 
 async function sendVoiceMsg() {
@@ -998,10 +1119,12 @@ async function sendVoiceMsg() {
   const chunks = voiceChunks.slice();
   voiceRec = null;
   voiceChunks = [];
-  hideVoiceUI();
+  document.getElementById('micBtn').classList.remove('recording');
+  exitRecordingMode();
   if (!chunks.length || !currentChat) return;
   const blob = new Blob(chunks, { type: chunks[0].type || 'audio/webm' });
   if (blob.size < 500) return;
+  showToast('Sending voice message…');
   const file = new File([blob], 'voice.webm', { type: blob.type });
   const { url } = await cloudUpload(file);
   socket.emit('private_message', { receiver: currentChat, message: '', sender_message: '', msg_type: 'voice', media_url: url, reply_to: replyingTo || '' });
@@ -1010,34 +1133,74 @@ async function sendVoiceMsg() {
 
 (function initVoiceMic() {
   const mic = document.getElementById('micBtn');
+  const LOCK_THRESHOLD = 60;   // px up
+  const CANCEL_THRESHOLD = 60; // px left
+  const SEND_THRESHOLD = 60;   // px right
+
+  function handleStart(startX, startY) {
+    voiceMicStartX = startX;
+    voiceMicStartY = startY;
+    startVoiceRec();
+  }
+
+  function handleMove(curX, curY) {
+    if (!voiceRec || voiceLocked) return;
+    const dx = curX - voiceMicStartX;
+    const dy = voiceMicStartY - curY; // positive = upward
+    // Update gesture hint highlights
+    const lk = document.getElementById('vghLock');
+    if (dy > 20) lk.classList.add('active'); else lk.classList.remove('active');
+    // Trigger lock
+    if (dy > LOCK_THRESHOLD) { lockVoiceRec(); return; }
+    // Trigger instant cancel
+    if (dx < -CANCEL_THRESHOLD) { cancelVoiceRec(); return; }
+    // Trigger instant send
+    if (dx > SEND_THRESHOLD) { sendVoiceMsg(); return; }
+  }
+
+  function handleEnd() {
+    if (!voiceRec || voiceLocked) return;
+    // Release without gesture = send
+    const elapsed = Date.now() - voiceStartTime;
+    if (elapsed < 500) cancelVoiceRec();
+    else sendVoiceMsg();
+  }
+
+  // Touch
   mic.addEventListener('touchstart', e => {
     e.preventDefault();
-    voiceMicStartX = e.touches[0].clientX;
-    startVoiceRec();
+    handleStart(e.touches[0].clientX, e.touches[0].clientY);
   }, { passive: false });
-  mic.addEventListener('touchmove', e => {
-    if (!voiceRec || voiceLocked) return;
-    if (e.touches[0].clientX - voiceMicStartX > 70) lockVoiceRec();
+
+  document.addEventListener('touchmove', e => {
+    if (!voiceMicActive) return;
+    handleMove(e.touches[0].clientX, e.touches[0].clientY);
   }, { passive: true });
-  mic.addEventListener('touchend', e => {
-    if (!voiceRec || voiceLocked) return;
-    e.preventDefault();
-    if (Date.now() - voiceStartTime < 500) cancelVoiceRec();
-    else sendVoiceMsg();
-  }, { passive: false });
+
+  document.addEventListener('touchend', () => {
+    if (!voiceMicActive) return;
+    handleEnd();
+  });
+
+  document.addEventListener('touchcancel', () => {
+    if (!voiceMicActive) return;
+    cancelVoiceRec();
+  });
+
+  // Mouse (desktop)
   mic.addEventListener('mousedown', e => {
     e.preventDefault();
-    voiceMicStartX = e.clientX;
-    startVoiceRec();
+    handleStart(e.clientX, e.clientY);
   });
+
   document.addEventListener('mousemove', e => {
-    if (!voiceMicActive || !voiceRec || voiceLocked) return;
-    if (e.clientX - voiceMicStartX > 70) lockVoiceRec();
+    if (!voiceMicActive) return;
+    handleMove(e.clientX, e.clientY);
   });
+
   document.addEventListener('mouseup', () => {
-    if (!voiceMicActive || voiceLocked) return;
-    if (Date.now() - voiceStartTime < 500) cancelVoiceRec();
-    else sendVoiceMsg();
+    if (!voiceMicActive) return;
+    handleEnd();
   });
 })();
 
@@ -1152,7 +1315,7 @@ socket.on('user_list_update', users => {
 
 // Typing indicator emit
 document.getElementById('msgInput').addEventListener('input', () => {
-  updateSendMic();
+  updateInputUI();
   if (!currentChat) return;
   socket.emit('typing', { receiver: currentChat, typing: true });
   clearTimeout(typingTimer);
@@ -1160,7 +1323,7 @@ document.getElementById('msgInput').addEventListener('input', () => {
 });
 
 document.getElementById('msgInput').addEventListener('keydown', e => { if (e.key === 'Enter') sendMsg(); });
-updateSendMic();
+updateInputUI();
 
 // ── Init ──────────────────────────────────────────────────────
 initKeys().then(async () => {
