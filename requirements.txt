@@ -1,7 +1,0 @@
-flask
-flask-socketio
-werkzeug
-gunicorn
-gevent
-gevent-websocket
-psycopg2-binary
