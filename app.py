@@ -144,11 +144,11 @@ def signup():
             conn.close()
             session['user_id'] = user_id
             return redirect(url_for('index'))
-        except psycopg2.IntegrityError:
+        except Exception as e:
             conn.rollback()
             cur.close()
             conn.close()
-            error = 'That ID is already taken'
+            error = str(e)
     return render_template('signup.html', error=error)
 
 @app.route('/logout')
