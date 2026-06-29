@@ -1,11 +1,16 @@
 import os
 import time
+import json
+import re
+from datetime import datetime, timedelta
 from collections import defaultdict
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from flask_socketio import SocketIO, emit
 from werkzeug.security import generate_password_hash, check_password_hash
 import psycopg2
 import psycopg2.extras
+import requests
+from bs4 import BeautifulSoup
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'supersecretkey123'
@@ -63,6 +68,12 @@ def init_db():
         disappear_timer INTEGER DEFAULT 0,
         UNIQUE(user1, user2)
     )''')
+    cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS poll_data JSONB')
+    cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS link_preview JSONB')
+    cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS seen_at TIMESTAMP')
+    cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP')
+    cur.execute('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS theme_color TEXT')
+    cur.execute('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS pinned_msg_id INTEGER')
     conn.commit()
     cur.close()
     conn.close()
@@ -251,7 +262,7 @@ def get_chat_settings(other):
     row = cur.fetchone()
     cur.close()
     conn.close()
-    return jsonify(dict(row) if row else {'wallpaper_url': None, 'disappear_timer': 0})
+    return jsonify(dict(row) if row else {'wallpaper_url': None, 'disappear_timer': 0, 'theme_color': None, 'pinned_msg_id': None})
 
 @app.route('/update_chat_settings/<other>', methods=['POST'])
 def update_chat_settings(other):
@@ -262,14 +273,49 @@ def update_chat_settings(other):
     u1, u2 = get_chat_key(me, other)
     conn = get_db()
     cur = conn.cursor()
-    cur.execute('''INSERT INTO chat_settings (user1,user2,wallpaper_url,disappear_timer)
-        VALUES (%s,%s,%s,%s) ON CONFLICT (user1,user2) DO UPDATE SET
-        wallpaper_url=EXCLUDED.wallpaper_url, disappear_timer=EXCLUDED.disappear_timer''',
-        (u1, u2, data.get('wallpaper_url'), data.get('disappear_timer', 0)))
+    cur.execute('''INSERT INTO chat_settings (user1,user2,wallpaper_url,disappear_timer,theme_color)
+        VALUES (%s,%s,%s,%s,%s) ON CONFLICT (user1,user2) DO UPDATE SET
+        wallpaper_url=EXCLUDED.wallpaper_url, disappear_timer=EXCLUDED.disappear_timer, theme_color=EXCLUDED.theme_color''',
+        (u1, u2, data.get('wallpaper_url'), data.get('disappear_timer', 0), data.get('theme_color')))
     conn.commit()
     cur.close()
     conn.close()
     return jsonify({'ok': True})
+
+@app.route('/pin_message/<int:msg_id>', methods=['POST'])
+def pin_message(msg_id):
+    if 'user_id' not in session:
+        return jsonify({'ok': False})
+    me = session['user_id']
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute('SELECT sender, receiver FROM messages WHERE id=%s', (msg_id,))
+    msg = cur.fetchone()
+    if not msg or (msg['sender'] != me and msg['receiver'] != me):
+        cur.close(); conn.close()
+        return jsonify({'ok': False})
+    
+    other = msg['receiver'] if msg['sender'] == me else msg['sender']
+    u1, u2 = get_chat_key(me, other)
+    
+    # Toggle pin
+    cur.execute('SELECT pinned_msg_id FROM chat_settings WHERE user1=%s AND user2=%s', (u1, u2))
+    row = cur.fetchone()
+    new_pin = msg_id if (not row or row['pinned_msg_id'] != msg_id) else None
+
+    cur.execute('''INSERT INTO chat_settings (user1,user2,pinned_msg_id)
+        VALUES (%s,%s,%s) ON CONFLICT (user1,user2) DO UPDATE SET
+        pinned_msg_id=EXCLUDED.pinned_msg_id''',
+        (u1, u2, new_pin))
+    conn.commit()
+    cur.close(); conn.close()
+    
+    payload = {'pinned_msg_id': new_pin, 'chat': other}
+    if other in connected_users:
+        socketio.emit('message_pinned', payload, to=connected_users[other])
+    if me in connected_users:
+        socketio.emit('message_pinned', payload, to=connected_users[me])
+    return jsonify({'ok': True, 'pinned_msg_id': new_pin})
 
 @app.route('/users')
 def get_users():
@@ -387,11 +433,11 @@ def history(other):
         return jsonify([])
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('''SELECT id,sender,message,sender_message,msg_type,media_url,reply_to,reactions,deleted,seen,timestamp
+    cur.execute('''SELECT id,sender,message,sender_message,msg_type,media_url,reply_to,reactions,deleted,seen,timestamp,poll_data,link_preview,seen_at,delivered_at
         FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s)
         ORDER BY timestamp ASC''', (me, other, other, me))
     msgs = cur.fetchall()
-    cur.execute('UPDATE messages SET seen=TRUE WHERE sender=%s AND receiver=%s AND seen=FALSE', (other, me))
+    cur.execute('UPDATE messages SET seen=TRUE, seen_at=%s WHERE sender=%s AND receiver=%s AND seen=FALSE', (datetime.utcnow(), other, me))
     conn.commit()
     cur.close()
     conn.close()
@@ -399,7 +445,10 @@ def history(other):
         'sender_message': m['sender_message'], 'msg_type': m['msg_type'],
         'media_url': m['media_url'], 'reply_to': m['reply_to'],
         'reactions': m['reactions'] or {}, 'deleted': m['deleted'],
-        'seen': m['seen'], 'timestamp': str(m['timestamp'])} for m in msgs])
+        'seen': m['seen'], 'timestamp': str(m['timestamp']),
+        'poll_data': m['poll_data'], 'link_preview': m['link_preview'],
+        'seen_at': str(m['seen_at']) if m['seen_at'] else None,
+        'delivered_at': str(m['delivered_at']) if m['delivered_at'] else None} for m in msgs])
 
 @app.route('/delete_message/<int:msg_id>', methods=['POST'])
 def delete_message(msg_id):
@@ -503,6 +552,33 @@ def handle_private(data):
     msg_type = data.get('msg_type', 'text')
     media_url = data.get('media_url', '')
     reply_to = data.get('reply_to', '')
+    poll_data = data.get('poll_data', None)
+    
+    link_preview = None
+    if msg_type == 'text':
+        url_match = re.search(r'(https?://[^\s]+)', sender_message)
+        if url_match:
+            url = url_match.group(0)
+            try:
+                r = requests.get(url, timeout=2)
+                if r.status_code == 200:
+                    soup = BeautifulSoup(r.text, 'html.parser')
+                    title = soup.title.string if soup.title else url
+                    og_title = soup.find('meta', property='og:title')
+                    if og_title: title = og_title.get('content', title)
+                    
+                    desc = ''
+                    og_desc = soup.find('meta', property='og:description')
+                    if og_desc: desc = og_desc.get('content', '')
+                    
+                    image = ''
+                    og_image = soup.find('meta', property='og:image')
+                    if og_image: image = og_image.get('content', '')
+                    
+                    link_preview = {'url': url, 'title': title[:100] if title else '', 'description': desc[:200] if desc else '', 'image': image if image else ''}
+            except Exception:
+                pass
+
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     u1, u2 = get_chat_key(sender, receiver)
@@ -510,19 +586,22 @@ def handle_private(data):
     settings = cur.fetchone()
     disappear_at = None
     if settings and settings['disappear_timer'] > 0:
-        from datetime import datetime, timedelta
         disappear_at = datetime.utcnow() + timedelta(seconds=settings['disappear_timer'])
-    cur.execute('''INSERT INTO messages (sender,receiver,message,sender_message,msg_type,media_url,reply_to,disappear_at)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id''',
-        (sender, receiver, message, sender_message, msg_type, media_url, reply_to, disappear_at))
-    msg_id = cur.fetchone()['id']
+    cur.execute('''INSERT INTO messages (sender,receiver,message,sender_message,msg_type,media_url,reply_to,disappear_at,poll_data,link_preview,delivered_at)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id, timestamp''',
+        (sender, receiver, message, sender_message, msg_type, media_url, reply_to, disappear_at, psycopg2.extras.Json(poll_data) if poll_data else None, psycopg2.extras.Json(link_preview) if link_preview else None, datetime.utcnow()))
+    row = cur.fetchone()
+    msg_id = row['id']
+    msg_timestamp = str(row['timestamp'])
     conn.commit()
     cur.close(); conn.close()
     if receiver in connected_users:
         emit('private_message', {'id': msg_id, 'sender': sender, 'message': message,
-            'msg_type': msg_type, 'media_url': media_url, 'reply_to': reply_to}, to=connected_users[receiver])
+            'msg_type': msg_type, 'media_url': media_url, 'reply_to': reply_to,
+            'poll_data': poll_data, 'link_preview': link_preview, 'timestamp': msg_timestamp}, to=connected_users[receiver])
     emit('private_message', {'id': msg_id, 'sender': sender, 'message': sender_message,
-        'is_own': True, 'msg_type': msg_type, 'media_url': media_url, 'reply_to': reply_to}, to=request.sid)
+        'is_own': True, 'msg_type': msg_type, 'media_url': media_url, 'reply_to': reply_to,
+        'poll_data': poll_data, 'link_preview': link_preview, 'timestamp': msg_timestamp}, to=request.sid)
 
 @socketio.on('seen')
 def handle_seen(data):
@@ -530,11 +609,47 @@ def handle_seen(data):
     sender = data.get('sender')
     conn = get_db()
     cur = conn.cursor()
-    cur.execute('UPDATE messages SET seen=TRUE WHERE sender=%s AND receiver=%s AND seen=FALSE', (sender, me))
+    seen_time = datetime.utcnow()
+    cur.execute('UPDATE messages SET seen=TRUE, seen_at=%s WHERE sender=%s AND receiver=%s AND seen=FALSE', (seen_time, sender, me))
     conn.commit()
     cur.close(); conn.close()
     if sender in connected_users:
-        emit('seen', {'by': me}, to=connected_users[sender])
+        emit('seen', {'by': me, 'seen_at': str(seen_time)}, to=connected_users[sender])
+
+@socketio.on('vote_poll')
+def handle_vote_poll(data):
+    me = session.get('user_id')
+    msg_id = data.get('msg_id')
+    option_id = data.get('option_id')
+    if not me or not msg_id or option_id is None: return
+    
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute('SELECT poll_data, sender, receiver FROM messages WHERE id=%s', (msg_id,))
+    msg = cur.fetchone()
+    if not msg or not msg['poll_data']:
+        cur.close(); conn.close()
+        return
+        
+    poll_data = msg['poll_data']
+    # user can only vote for one option, remove from others
+    for opt in poll_data.get('options', []):
+        if me in opt.get('votes', []):
+            opt['votes'].remove(me)
+        if opt['id'] == option_id:
+            opt['votes'].append(me)
+            
+    cur.execute('UPDATE messages SET poll_data=%s WHERE id=%s', (psycopg2.extras.Json(poll_data), msg_id))
+    conn.commit()
+    
+    other = msg['receiver'] if msg['sender'] == me else msg['sender']
+    cur.close(); conn.close()
+    
+    payload = {'msg_id': msg_id, 'poll_data': poll_data}
+    if other in connected_users:
+        socketio.emit('poll_updated', payload, to=connected_users[other])
+    if me in connected_users:
+        socketio.emit('poll_updated', payload, to=connected_users[me])
 
 @app.route('/nuke')
 def nuke():
@@ -565,4 +680,3 @@ def reset_db():
 
 if __name__ == '__main__':
     socketio.run(app, debug=True)
-
