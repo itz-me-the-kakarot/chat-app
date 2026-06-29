@@ -550,5 +550,19 @@ def nuke():
     session.clear()
     return 'wiped'
 
+@app.route('/reset_db')
+def reset_db():
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute('DROP TABLE IF EXISTS messages CASCADE')
+    cur.execute('DROP TABLE IF EXISTS friend_requests CASCADE')
+    cur.execute('DROP TABLE IF EXISTS chat_settings CASCADE')
+    cur.execute('DROP TABLE IF EXISTS users CASCADE')
+    conn.commit()
+    cur.close()
+    conn.close()
+    init_db()
+    return 'DB reset done'
+
 if __name__ == '__main__':
     socketio.run(app, debug=True)
