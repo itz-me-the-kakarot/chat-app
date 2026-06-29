@@ -983,11 +983,16 @@ async function sendMsg() {
   const i = document.getElementById('msgInput'); const msg = i.value.trim();
   if(!msg || !currentChat) return;
   const rK = await getPubKey(currentChat);
-  const eR = await enc(rK, msg); const eS = await enc(myPublicKey, msg);
-  socket.emit('private_message', { receiver: currentChat, message: eR, sender_message: eS, msg_type: 'text', reply_to: replyingTo||'' });
-  i.value = ''; cancelReply();
-  document.getElementById('plusSendBtn').classList.remove('is-send');
-  document.getElementById('plusIcon').style.display='block'; document.getElementById('sendIcon').style.display='none';
+  if(!rK) { showToast("Error: Friend hasn't set up encryption yet."); return; }
+  try {
+    const eR = await enc(rK, msg); const eS = await enc(myPublicKey, msg);
+    socket.emit('private_message', { receiver: currentChat, message: eR, sender_message: eS, msg_type: 'text', reply_to: replyingTo||'' });
+    i.value = ''; cancelReply();
+    document.getElementById('plusSendBtn').classList.remove('is-send');
+    document.getElementById('plusIcon').style.display='block'; document.getElementById('sendIcon').style.display='none';
+  } catch (err) {
+    showToast("Encryption error: " + err.message);
+  }
 }
 async function sendFile(inp) {
   const f = inp.files[0]; if(!f||!currentChat) return;
@@ -1098,8 +1103,13 @@ initKeys().then(async()=>{
   await loadTheme();
   await loadProfile();
   renderTab();
+  
+  // Check for pending requests to show red dot on init
+  const reqs = await fetch('/friend_requests').then(r=>r.json());
+  if(reqs && reqs.length > 0) {
+    document.getElementById('reqTab').innerHTML = `Requests<span class="ndot"></span>`;
+  }
 });
 </script>
 </body>
 </html>
-
