@@ -98,7 +98,8 @@
     .rib:hover { color:#e8eaf0; background:rgba(255,255,255,.06); }
     .rib svg { width:22px; height:22px; }
     /* mic hold state */
-    #micBtn { position:relative; transition:transform 0.15s, background 0.2s; touch-action:none; user-select:none; -webkit-user-select:none; }
+    #micBtn { position:relative; transition:transform 0.25s cubic-bezier(0.175,0.885,0.32,1.275), background 0.2s, color 0.2s; touch-action:none; user-select:none; -webkit-user-select:none; will-change:transform; }
+    #micBtn.dragging-active { transition:none !important; } /* zero-latency during drag */
     #micBtn.recording { color:#f87171; animation:micPulse 1s infinite; }
     @keyframes micPulse { 0%,100%{opacity:1} 50%{opacity:.6} }
     /* plus/send btn */
@@ -145,9 +146,12 @@
     /* floating gesture hints above mic */
     #voiceGestureHint { position:absolute; bottom:70px; right:10px; pointer-events:none; z-index:60; display:none; flex-direction:column; align-items:center; gap:6px; }
     #voiceGestureHint.show { display:flex; }
-    .vgh-lock { background:#1a2340; border:1px solid #4f8ef7; border-radius:20px; padding:6px 12px; font-size:12px; color:#4f8ef7; display:flex; align-items:center; gap:4px; white-space:nowrap; transition:transform 0.15s; }
-    .vgh-lock.active { background:#4f8ef7; color:#fff; transform:scale(1.05); }
-    .vgh-cancel { background:#1a2340; border:1px solid #f87171; border-radius:20px; padding:6px 12px; font-size:12px; color:#f87171; display:flex; align-items:center; gap:4px; white-space:nowrap; }
+    .vgh-lock { background:#1a2340; border:1px solid #4f8ef7; border-radius:20px; padding:6px 12px; font-size:12px; color:#4f8ef7; display:flex; align-items:center; gap:4px; white-space:nowrap; transition:transform 0.15s, background 0.15s, color 0.15s, box-shadow 0.15s; }
+    .vgh-lock.active { background:#4f8ef7; color:#fff; transform:scale(1.08); box-shadow:0 0 14px rgba(79,142,247,.55); }
+    .vgh-lock.near { transform:scale(1.03); box-shadow:0 0 8px rgba(79,142,247,.3); }
+    .vgh-cancel { background:#1a2340; border:1px solid #f87171; border-radius:20px; padding:6px 12px; font-size:12px; color:#f87171; display:flex; align-items:center; gap:4px; white-space:nowrap; transition:transform 0.15s, background 0.15s, color 0.15s, box-shadow 0.15s; }
+    .vgh-cancel.near { transform:scale(1.03); box-shadow:0 0 8px rgba(248,113,113,.3); }
+    .vgh-cancel.active { background:#f87171; color:#fff; transform:scale(1.08); box-shadow:0 0 14px rgba(248,113,113,.55); }
     /* slide hint on the input row level */
     #voiceSlideHint { position:absolute; left:50%; transform:translateX(-50%); bottom:70px; background:rgba(26,35,64,.95); border:1px solid #1e2a45; border-radius:12px; padding:7px 14px; font-size:12px; color:#4a5568; display:none; pointer-events:none; z-index:55; white-space:nowrap; }
     #voiceSlideHint.show { display:block; }
@@ -1133,13 +1137,64 @@ async function sendVoiceMsg() {
 
 (function initVoiceMic() {
   const mic = document.getElementById('micBtn');
-  const LOCK_THRESHOLD = 60;   // px up
-  const CANCEL_THRESHOLD = 60; // px left
-  const SEND_THRESHOLD = 60;   // px right
+  const LOCK_THRESHOLD   = 60; // px upward   → lock
+  const CANCEL_THRESHOLD = 60; // px leftward  → cancel
+  const SEND_THRESHOLD   = 60; // px rightward → send
 
+  // Zone proximity thresholds for visual "near" feedback
+  const NEAR_LOCK   = 30;
+  const NEAR_CANCEL = 30;
+
+  /* ── Drag-translation helpers ─────────────────────────────── */
+  function applyMicTranslate(dx, dy) {
+    // Clamp so button stays within a comfortable drag radius
+    const clampX = Math.max(-CANCEL_THRESHOLD * 1.4, Math.min(SEND_THRESHOLD * 1.4, dx));
+    const clampY = Math.max(-LOCK_THRESHOLD * 1.4, Math.min(20, -dy)); // dy positive=up → negative Y
+    mic.style.transform = `translate(${clampX}px, ${-dy > 0 ? Math.min(clampY * 0.4, 8) : Math.max(clampY * 0.4, -8)}px) scale(1.15)`;
+  }
+
+  function snapMicBack() {
+    // Re-enable elastic transition before clearing transform
+    mic.classList.remove('dragging-active');
+    mic.style.transform = '';
+  }
+
+  /* ── Zone icon state helpers ──────────────────────────────── */
+  function updateZoneIcons(dx, dy) {
+    const lk  = document.getElementById('vghLock');
+    const cnc = document.getElementById('vghCancel');
+    // Lock icon (upward)
+    if (dy >= LOCK_THRESHOLD) {
+      lk.classList.add('active');  lk.classList.remove('near');
+    } else if (dy >= NEAR_LOCK) {
+      lk.classList.add('near');    lk.classList.remove('active');
+    } else {
+      lk.classList.remove('active', 'near');
+    }
+    // Cancel icon (leftward)
+    if (dx <= -CANCEL_THRESHOLD) {
+      cnc.classList.add('active'); cnc.classList.remove('near');
+    } else if (dx <= -NEAR_CANCEL) {
+      cnc.classList.add('near');   cnc.classList.remove('active');
+    } else {
+      cnc.classList.remove('active', 'near');
+    }
+  }
+
+  function clearZoneIcons() {
+    const lk  = document.getElementById('vghLock');
+    const cnc = document.getElementById('vghCancel');
+    lk.classList.remove('active', 'near');
+    cnc.classList.remove('active', 'near');
+  }
+
+  /* ── Core gesture handlers ────────────────────────────────── */
   function handleStart(startX, startY) {
     voiceMicStartX = startX;
     voiceMicStartY = startY;
+    // Kill CSS transition immediately so button follows pointer with zero latency
+    mic.classList.add('dragging-active');
+    mic.style.transform = 'scale(1.15)';
     startVoiceRec();
   }
 
@@ -1147,26 +1202,32 @@ async function sendVoiceMsg() {
     if (!voiceRec || voiceLocked) return;
     const dx = curX - voiceMicStartX;
     const dy = voiceMicStartY - curY; // positive = upward
-    // Update gesture hint highlights
-    const lk = document.getElementById('vghLock');
-    if (dy > 20) lk.classList.add('active'); else lk.classList.remove('active');
+
+    // Live translate the mic button with zero-latency
+    applyMicTranslate(dx, dy);
+
+    // Update zone icon visual states
+    updateZoneIcons(dx, dy);
+
     // Trigger lock
-    if (dy > LOCK_THRESHOLD) { lockVoiceRec(); return; }
+    if (dy > LOCK_THRESHOLD) { snapMicBack(); clearZoneIcons(); lockVoiceRec(); return; }
     // Trigger instant cancel
-    if (dx < -CANCEL_THRESHOLD) { cancelVoiceRec(); return; }
+    if (dx < -CANCEL_THRESHOLD) { snapMicBack(); clearZoneIcons(); cancelVoiceRec(); return; }
     // Trigger instant send
-    if (dx > SEND_THRESHOLD) { sendVoiceMsg(); return; }
+    if (dx > SEND_THRESHOLD) { snapMicBack(); clearZoneIcons(); sendVoiceMsg(); return; }
   }
 
   function handleEnd() {
     if (!voiceRec || voiceLocked) return;
-    // Release without gesture = send
+    snapMicBack();
+    clearZoneIcons();
+    // Release without gesture = send if long enough, else cancel
     const elapsed = Date.now() - voiceStartTime;
     if (elapsed < 500) cancelVoiceRec();
     else sendVoiceMsg();
   }
 
-  // Touch
+  /* ── Touch events ─────────────────────────────────────────── */
   mic.addEventListener('touchstart', e => {
     e.preventDefault();
     handleStart(e.touches[0].clientX, e.touches[0].clientY);
@@ -1184,10 +1245,12 @@ async function sendVoiceMsg() {
 
   document.addEventListener('touchcancel', () => {
     if (!voiceMicActive) return;
+    snapMicBack();
+    clearZoneIcons();
     cancelVoiceRec();
   });
 
-  // Mouse (desktop)
+  /* ── Mouse events (desktop) ───────────────────────────────── */
   mic.addEventListener('mousedown', e => {
     e.preventDefault();
     handleStart(e.clientX, e.clientY);
