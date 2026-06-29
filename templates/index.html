@@ -318,19 +318,34 @@
       <button class="x" onclick="cancelReply()">×</button>
     </div>
     <div class="input-row" id="inputRow">
+      <!-- Plus Menu Button -->
+      <button class="cam-btn" onclick="togglePlusMenu(event)" title="More options" style="margin-right:2px;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="8" x2="12" y2="16"/>
+          <line x1="8" y1="12" x2="16" y2="12"/>
+        </svg>
+      </button>
+
       <!-- Camera left -->
-      <button class="cam-btn" onclick="document.getElementById('cameraInput').click()" title="Camera">
+      <button class="cam-btn" onclick="document.getElementById('cameraInput').click()" title="Camera" style="margin-right:4px;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
           <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
           <circle cx="12" cy="13" r="4"/>
         </svg>
       </button>
+
       <input type="file" id="cameraInput" accept="image/*" capture="environment" onchange="sendFile(this)"/>
       <input type="file" id="galleryInput" accept="image/*,video/*" onchange="sendFile(this)"/>
       <input type="file" id="fileInput" accept="*/*" onchange="sendFile(this)"/>
 
-      <!-- Text input -->
-      <input id="msgInput" type="text" placeholder="Message..." autocomplete="off"/>
+      <!-- Text input wrapper -->
+      <div style="flex:1; display:flex; align-items:center; background:#1a2340; border:1px solid #1e2a45; border-radius:24px; padding:0 12px; transition:border-color 0.2s; min-width:0;" id="inputWrap">
+        <input id="msgInput" type="text" placeholder="Message..." autocomplete="off" style="flex:1; background:transparent; border:none; padding:11px 0; color:#e8eaf0; font-family:'Inter',sans-serif; font-size:14px; outline:none; min-width:0;"/>
+        <button class="rib" onclick="openGifModal()" title="GIF" style="width:28px;height:28px;padding:0;margin-left:4px;">
+          <span style="font-size:12px;font-weight:700;color:inherit;font-family:sans-serif;">GIF</span>
+        </button>
+      </div>
 
       <!-- Voice bar (replaces everything in recording mode) -->
       <div id="voiceBar">
@@ -350,49 +365,23 @@
 
       <!-- Right icons -->
       <div class="right-icons" id="rightIcons">
+        <button class="rib" id="plusSendBtn" onclick="sendMsg()" title="Send" style="display:none;">
+           <svg viewBox="0 0 24 24" fill="currentColor">
+             <path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/>
+           </svg>
+        </button>
         <button class="rib" id="micBtn" type="button" title="Hold to record">
           <svg viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-4.08c3.39-.49 6-3.39 6-6.92h-2z"/>
           </svg>
         </button>
-        <button class="rib" onclick="document.getElementById('galleryInput').click()" title="Gallery">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <rect x="3" y="3" width="18" height="18" rx="2"/>
-            <circle cx="8.5" cy="8.5" r="1.5"/>
-            <polyline points="21 15 16 10 5 21"/>
-          </svg>
-        </button>
-        <button class="rib" onclick="document.getElementById('fileInput').click()" title="File">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-            <polyline points="14 2 14 8 20 8"/>
-          </svg>
-        </button>
-        <button class="rib" onclick="openGifModal()" title="GIF">
-          <span style="font-size:16px;font-weight:600;font-family:sans-serif;color:inherit;">GIF</span>
-        </button>
-        <button class="rib" onclick="openPollModal()" title="Poll">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="8" y1="6" x2="21" y2="6"/>
-            <line x1="8" y1="12" x2="21" y2="12"/>
-            <line x1="8" y1="18" x2="21" y2="18"/>
-            <line x1="3" y1="6" x2="3.01" y2="6"/>
-            <line x1="3" y1="12" x2="3.01" y2="12"/>
-            <line x1="3" y1="18" x2="3.01" y2="18"/>
-          </svg>
-        </button>
-        <button class="rib" id="plusSendBtn" onclick="handlePlusSend()" title="More">
-          <!-- Plus icon (default) -->
-          <svg id="plusIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="12" y1="8" x2="12" y2="16"/>
-            <line x1="8" y1="12" x2="16" y2="12"/>
-          </svg>
-          <!-- Send icon (when typing) -->
-          <svg id="sendIcon" viewBox="0 0 24 24" fill="currentColor" style="display:none">
-            <path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/>
-          </svg>
-        </button>
+      </div>
+
+      <!-- Plus Menu Dropdown (Upside) -->
+      <div class="plus-menu" id="plusMenu" style="display:none; position:absolute; bottom:100%; left:10px; background:#1a2340; border:1px solid #1e2a45; border-radius:12px; padding:8px 0; margin-bottom:8px; box-shadow:0 4px 20px rgba(0,0,0,.4); z-index:100; min-width:140px; flex-direction:column;">
+        <div class="plus-item" onclick="document.getElementById('galleryInput').click(); togglePlusMenu();" style="padding:10px 16px;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:10px;">🖼️ Gallery</div>
+        <div class="plus-item" onclick="document.getElementById('fileInput').click(); togglePlusMenu();" style="padding:10px 16px;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:10px;">📄 File</div>
+        <div class="plus-item" onclick="openPollModal(); togglePlusMenu();" style="padding:10px 16px;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:10px;">📊 Poll</div>
       </div>
     </div>
     <!-- Floating gesture hints during hold-to-record -->
@@ -680,6 +669,7 @@ function openAvatarCrop(input) {
   reader.onload = e => {
     const img = new Image();
     img.onload = () => {
+      document.getElementById('cropModal').classList.add('show');
       const vp = document.getElementById('cropViewport');
       const canvas = document.getElementById('cropCanvas');
       const frame = document.getElementById('cropFrame');
@@ -695,7 +685,7 @@ function openAvatarCrop(input) {
       const scale = Math.max(size / img.width, size / img.height);
       cropState = { img, canvas, vw, vh, size, scale, offsetX: (vw - img.width * scale) / 2, offsetY: (vh - img.height * scale) / 2, lastDist: 0, lastX: 0, lastY: 0, dragging: false, pinching: false };
       drawCrop();
-      document.getElementById('cropModal').classList.add('show');
+
       setupCropGestures(vp);
     };
     img.src = e.target.result;
@@ -1668,6 +1658,45 @@ document.getElementById('msgInput').addEventListener('input', () => {
 });
 
 document.getElementById('msgInput').addEventListener('keydown', e => { if (e.key === 'Enter') sendMsg(); });
+function updateInputUI() {
+  const val = document.getElementById('msgInput').value.trim();
+  const plusSend = document.getElementById('plusSendBtn');
+  const mic = document.getElementById('micBtn');
+  const leftBtns = document.querySelectorAll('.input-row > .cam-btn');
+  const gifBtn = document.querySelector('#inputWrap .rib'); // GIF button inside input
+
+  if (val.length > 0) {
+    mic.style.display = 'none';
+    plusSend.style.display = 'flex';
+    plusSend.classList.add('is-send');
+    leftBtns.forEach(b => b.style.display = 'none');
+    if (gifBtn) gifBtn.style.display = 'none';
+  } else {
+    mic.style.display = 'flex';
+    plusSend.style.display = 'none';
+    plusSend.classList.remove('is-send');
+    leftBtns.forEach(b => b.style.display = 'flex');
+    if (gifBtn) gifBtn.style.display = 'flex';
+  }
+}
+function togglePlusMenu(e) {
+  if (e) e.stopPropagation();
+  const m = document.getElementById('plusMenu');
+  m.style.display = m.style.display === 'flex' ? 'none' : 'flex';
+}
+document.addEventListener('click', e => {
+  const m = document.getElementById('plusMenu');
+  if (m && m.style.display === 'flex' && !e.target.closest('#plusMenu') && !e.target.closest('.cam-btn')) {
+    m.style.display = 'none';
+  }
+});
+document.getElementById('msgInput').addEventListener('focus', () => {
+  document.getElementById('inputWrap').style.borderColor = 'var(--accent)';
+});
+document.getElementById('msgInput').addEventListener('blur', () => {
+  document.getElementById('inputWrap').style.borderColor = '#1e2a45';
+});
+
 updateInputUI();
 
 // ── Init ──────────────────────────────────────────────────────
