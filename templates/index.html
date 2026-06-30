@@ -1107,6 +1107,7 @@ function ctxEditMsg() {
   editingMsgId = ctxMsgId;
   const input = document.getElementById('msgInput');
   input.value = ctxMsgText;
+  updateInputUI(); 
   input.focus();
   // Show an editing indicator
   const replyBar = document.getElementById('replyBar');
@@ -1128,6 +1129,7 @@ function setReply(text) {
 
 function cancelReply() {
   replyingTo = null;
+  editingMsgId = null; 
   document.getElementById('replyBar').style.display = 'none';
   document.getElementById('replyText').textContent = '';
 }
@@ -1172,28 +1174,6 @@ async function sendFile(input) {
 let voiceRec = null, voiceChunks = [], voiceStream = null, voiceLocked = false, voicePaused = false;
 let voiceStartTime = 0, voiceElapsed = 0, voiceTimerInterval = null;
 let voiceMicStartX = 0, voiceMicStartY = 0, voiceMicActive = false;
-
-function updateInputUI() {
-  const hasText = document.getElementById('msgInput').value.trim().length > 0;
-  const plusSend = document.getElementById('plusSendBtn');
-  const plusIcon = document.getElementById('plusIcon');
-  const sendIcon = document.getElementById('sendIcon');
-  if (hasText) {
-    plusSend.classList.add('is-send');
-    plusIcon.style.display = 'none';
-    sendIcon.style.display = 'block';
-  } else {
-    plusSend.classList.remove('is-send');
-    plusIcon.style.display = 'block';
-    sendIcon.style.display = 'none';
-  }
-}
-
-function handlePlusSend() {
-  const hasText = document.getElementById('msgInput').value.trim().length > 0;
-  if (hasText) sendMsg();
-  else showToast('Coming soon');
-}
 
 function formatRecTime(ms) {
   const s = Math.floor(ms / 1000);
