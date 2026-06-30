@@ -1788,7 +1788,7 @@ initKeys().then(async () => {
 .story-progress .seg{flex:1;height:3px;background:rgba(255,255,255,.3);border-radius:2px;overflow:hidden;}
 .story-progress .seg .fill{height:100%;width:0%;background:#fff;}
 .story-head{display:flex;align-items:center;gap:8px;padding:0 12px 8px;color:#fff;flex-shrink:0;}
-.story-media-wrap{height:75vh;max-height:75vh;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;flex-shrink:0;}
+.story-media-wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;}
 .story-media-wrap img,.story-media-wrap video{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;}
 .story-reply-row{display:flex;align-items:center;padding:14px;gap:10px;flex-shrink:0;}
 .story-reply-pill{flex:1;display:flex;align-items:center;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.4);border-radius:30px;padding:4px 6px 4px 18px;gap:8px;}
@@ -1828,6 +1828,39 @@ initKeys().then(async () => {
 
 <script>
 let myStories = [], svUserIdx = 0, svStoryIdx = 0, svTimer = null, svDuration = 5000;
+let svPausedForInput = false;
+let svRemainingMs = 0;
+let svSegStartTime = 0;
+
+document.getElementById('svReplyInput').addEventListener('focus', () => {
+  svPausedForInput = true;
+  clearTimeout(svTimer);
+  const fill = document.getElementById('svFill' + svStoryIdx);
+  if (fill) {
+    const rect = fill.getBoundingClientRect();
+    const parentWidth = fill.parentElement.getBoundingClientRect().width;
+    const pct = parentWidth ? (rect.width / parentWidth) : 0;
+    svRemainingMs = svDuration * (1 - pct);
+    fill.style.transition = 'none';
+    fill.style.width = (pct * 100) + '%';
+  }
+  const vid = document.querySelector('#svMediaWrap video');
+  if (vid) vid.pause();
+});
+
+document.getElementById('svReplyInput').addEventListener('blur', () => {
+  svPausedForInput = false;
+  const vid = document.querySelector('#svMediaWrap video');
+  if (vid) vid.play();
+  const fill = document.getElementById('svFill' + svStoryIdx);
+  if (fill && svRemainingMs > 0) {
+    requestAnimationFrame(() => {
+      fill.style.transition = `width ${svRemainingMs}ms linear`;
+      fill.style.width = '100%';
+    });
+    svTimer = setTimeout(nextStory, svRemainingMs);
+  }
+});
 async function uploadStory(input) {
   const file = input.files[0];
   if (!file) return;
