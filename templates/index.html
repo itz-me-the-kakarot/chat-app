@@ -1939,6 +1939,7 @@ function showStory() {
   document.getElementById('svAvatar').innerHTML = g.avatar_url ? `<img src="${g.avatar_url}"/>` : (g.display_name||g.user_id)[0].toUpperCase();
   document.getElementById('svName').textContent = g.display_name;
   document.getElementById('svLikeBtn').classList.remove('liked');
+  document.querySelector('.story-reply-pill').style.display = g.is_me ? 'none' : 'flex';
   const wrap = document.getElementById('svMediaWrap');
   wrap.innerHTML = s.media_type === 'video'
     ? `<video src="${s.media_url}" autoplay muted></video>`
@@ -2023,11 +2024,13 @@ function closeStoryViewer() {
   loadStoriesBar();
 }
 function likeCurrentStory() {
+  if (myStories[svUserIdx].is_me) return;
   const s = myStories[svUserIdx].stories[svStoryIdx];
   fetch(`/story/${s.id}/like`, { method: 'POST' });
   document.getElementById('svLikeBtn').classList.add('liked');
 }
 async function sendStoryReply() {
+  if (myStories[svUserIdx].is_me) return;
   const input = document.getElementById('svReplyInput');
   const text = input.value.trim();
   if (!text) return;
