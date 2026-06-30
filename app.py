@@ -825,7 +825,7 @@ def handle_private(data):
     disappear_at = None
     if settings and settings['disappear_timer'] > 0:
         disappear_at = datetime.utcnow() + timedelta(seconds=settings['disappear_timer'])
-   cur.execute('''INSERT INTO messages (sender,receiver,message,sender_message,msg_type,media_url,reply_to,disappear_at,poll_data,link_preview,delivered_at,file_metadata,story_ref)
+    cur.execute('''INSERT INTO messages (sender,receiver,message,sender_message,msg_type,media_url,reply_to,disappear_at,poll_data,link_preview,delivered_at,file_metadata,story_ref)
         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id, timestamp''',
         (sender, receiver, message, sender_message, msg_type, media_url, reply_to, disappear_at, psycopg2.extras.Json(poll_data) if poll_data else None, psycopg2.extras.Json(link_preview) if link_preview else None, datetime.utcnow(), psycopg2.extras.Json(file_metadata) if file_metadata else None, psycopg2.extras.Json(story_ref) if story_ref else None))
     row = cur.fetchone()
