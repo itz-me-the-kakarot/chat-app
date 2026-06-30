@@ -74,6 +74,26 @@ def init_db():
     cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP')
     cur.execute('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS theme_color TEXT')
     cur.execute('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS pinned_msg_id INTEGER')
+    
+    # v6 features
+    cur.execute('''CREATE TABLE IF NOT EXISTS groups (
+        id SERIAL PRIMARY KEY,
+        group_id TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        avatar_url TEXT,
+        creator TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    cur.execute('''CREATE TABLE IF NOT EXISTS group_members (
+        group_id TEXT REFERENCES groups(group_id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL,
+        role TEXT DEFAULT 'member',
+        PRIMARY KEY (group_id, user_id)
+    )''')
+    cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS edited BOOLEAN DEFAULT FALSE')
+    cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS file_metadata JSONB')
+    cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_group BOOLEAN DEFAULT FALSE')
+    
     conn.commit()
     cur.close()
     conn.close()
@@ -433,22 +453,23 @@ def history(other):
         return jsonify([])
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('''SELECT id,sender,message,sender_message,msg_type,media_url,reply_to,reactions,deleted,seen,timestamp,poll_data,link_preview,seen_at,delivered_at
+    cur.execute('''SELECT id,sender,receiver,message,sender_message,msg_type,media_url,reply_to,reactions,deleted,seen,timestamp,poll_data,link_preview,seen_at,delivered_at,edited,file_metadata,is_group
         FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s)
         ORDER BY timestamp ASC''', (me, other, other, me))
     msgs = cur.fetchall()
-    cur.execute('UPDATE messages SET seen=TRUE, seen_at=%s WHERE sender=%s AND receiver=%s AND seen=FALSE', (datetime.utcnow(), other, me))
+    cur.execute('UPDATE messages SET seen=TRUE, seen_at=%s WHERE sender=%s AND receiver=%s AND seen=FALSE AND is_group=FALSE', (datetime.utcnow(), other, me))
     conn.commit()
     cur.close()
     conn.close()
-    return jsonify([{'id': m['id'], 'sender': m['sender'], 'message': m['message'],
+    return jsonify([{'id': m['id'], 'sender': m['sender'], 'receiver': m['receiver'], 'message': m['message'],
         'sender_message': m['sender_message'], 'msg_type': m['msg_type'],
         'media_url': m['media_url'], 'reply_to': m['reply_to'],
         'reactions': m['reactions'] or {}, 'deleted': m['deleted'],
         'seen': m['seen'], 'timestamp': str(m['timestamp']),
         'poll_data': m['poll_data'], 'link_preview': m['link_preview'],
         'seen_at': str(m['seen_at']) if m['seen_at'] else None,
-        'delivered_at': str(m['delivered_at']) if m['delivered_at'] else None} for m in msgs])
+        'delivered_at': str(m['delivered_at']) if m['delivered_at'] else None,
+        'edited': m['edited'], 'file_metadata': m['file_metadata'], 'is_group': m['is_group']} for m in msgs])
 
 @app.route('/delete_message/<int:msg_id>', methods=['POST'])
 def delete_message(msg_id):
@@ -465,11 +486,47 @@ def delete_message(msg_id):
     cur.execute('UPDATE messages SET deleted=TRUE,message=NULL,sender_message=NULL,media_url=NULL WHERE id=%s', (msg_id,))
     conn.commit()
     receiver = msg['receiver']
+    is_group = msg.get('is_group', False)
     cur.close(); conn.close()
-    if receiver in connected_users:
-        socketio.emit('message_deleted', {'id': msg_id}, to=connected_users[receiver])
-    if me in connected_users:
-        socketio.emit('message_deleted', {'id': msg_id}, to=connected_users[me])
+    if is_group:
+        socketio.emit('message_deleted', {'id': msg_id, 'room': receiver}, to=receiver)
+    else:
+        if receiver in connected_users:
+            socketio.emit('message_deleted', {'id': msg_id}, to=connected_users[receiver])
+        if me in connected_users:
+            socketio.emit('message_deleted', {'id': msg_id}, to=connected_users[me])
+    return jsonify({'ok': True})
+
+@app.route('/edit_message/<int:msg_id>', methods=['POST'])
+def edit_message(msg_id):
+    if 'user_id' not in session:
+        return jsonify({'ok': False})
+    me = session['user_id']
+    data = request.json
+    new_message = data.get('message')
+    new_sender_message = data.get('sender_message')
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute('SELECT sender,receiver,is_group FROM messages WHERE id=%s AND deleted=FALSE', (msg_id,))
+    msg = cur.fetchone()
+    if not msg or msg['sender'] != me:
+        cur.close(); conn.close()
+        return jsonify({'ok': False})
+    
+    cur.execute('UPDATE messages SET message=%s, sender_message=%s, edited=TRUE WHERE id=%s', (new_message, new_sender_message, msg_id))
+    conn.commit()
+    receiver = msg['receiver']
+    is_group = msg['is_group']
+    cur.close(); conn.close()
+    
+    payload = {'id': msg_id, 'message': new_message, 'sender_message': new_sender_message, 'edited': True}
+    if is_group:
+        socketio.emit('message_edited', payload, to=receiver)
+    else:
+        if receiver in connected_users:
+            socketio.emit('message_edited', payload, to=connected_users[receiver])
+        if me in connected_users:
+            socketio.emit('message_edited', payload, to=connected_users[me])
     return jsonify({'ok': True})
 
 @app.route('/react/<int:msg_id>', methods=['POST'])
@@ -553,6 +610,7 @@ def handle_private(data):
     media_url = data.get('media_url', '')
     reply_to = data.get('reply_to', '')
     poll_data = data.get('poll_data', None)
+    file_metadata = data.get('file_metadata', None)
     
     link_preview = None
     if msg_type == 'text':
@@ -587,9 +645,9 @@ def handle_private(data):
     disappear_at = None
     if settings and settings['disappear_timer'] > 0:
         disappear_at = datetime.utcnow() + timedelta(seconds=settings['disappear_timer'])
-    cur.execute('''INSERT INTO messages (sender,receiver,message,sender_message,msg_type,media_url,reply_to,disappear_at,poll_data,link_preview,delivered_at)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id, timestamp''',
-        (sender, receiver, message, sender_message, msg_type, media_url, reply_to, disappear_at, psycopg2.extras.Json(poll_data) if poll_data else None, psycopg2.extras.Json(link_preview) if link_preview else None, datetime.utcnow()))
+    cur.execute('''INSERT INTO messages (sender,receiver,message,sender_message,msg_type,media_url,reply_to,disappear_at,poll_data,link_preview,delivered_at,file_metadata)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id, timestamp''',
+        (sender, receiver, message, sender_message, msg_type, media_url, reply_to, disappear_at, psycopg2.extras.Json(poll_data) if poll_data else None, psycopg2.extras.Json(link_preview) if link_preview else None, datetime.utcnow(), psycopg2.extras.Json(file_metadata) if file_metadata else None))
     row = cur.fetchone()
     msg_id = row['id']
     msg_timestamp = str(row['timestamp'])
@@ -598,10 +656,10 @@ def handle_private(data):
     if receiver in connected_users:
         emit('private_message', {'id': msg_id, 'sender': sender, 'message': message,
             'msg_type': msg_type, 'media_url': media_url, 'reply_to': reply_to,
-            'poll_data': poll_data, 'link_preview': link_preview, 'timestamp': msg_timestamp}, to=connected_users[receiver])
+            'poll_data': poll_data, 'link_preview': link_preview, 'timestamp': msg_timestamp, 'file_metadata': file_metadata}, to=connected_users[receiver])
     emit('private_message', {'id': msg_id, 'sender': sender, 'message': sender_message,
         'is_own': True, 'msg_type': msg_type, 'media_url': media_url, 'reply_to': reply_to,
-        'poll_data': poll_data, 'link_preview': link_preview, 'timestamp': msg_timestamp}, to=request.sid)
+        'poll_data': poll_data, 'link_preview': link_preview, 'timestamp': msg_timestamp, 'file_metadata': file_metadata}, to=request.sid)
 
 @socketio.on('seen')
 def handle_seen(data):
