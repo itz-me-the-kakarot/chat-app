@@ -1811,10 +1811,18 @@ initKeys().then(async () => {
     <input type="text" id="svReplyInput" placeholder="Reply to story..." onkeydown="if(event.key==='Enter')sendStoryReply()"/>
   </div>
 </div>
+<input type="file" id="storyUploadInput" accept="image/*,video/*" style="display:none" onchange="uploadStory(this)"/>
 
 <script>
 let myStories = [], svUserIdx = 0, svStoryIdx = 0, svTimer = null, svDuration = 5000;
-
+async function uploadStory(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const { url, type } = await cloudUpload(file);
+  await fetch('/story', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ media_url: url, media_type: type === 'video' ? 'video' : 'image' }) });
+  input.value = '';
+  loadStoriesBar();
+}
 async function loadStoriesBar() {
   const bar = document.getElementById('storiesBar');
   if (!bar) return;
