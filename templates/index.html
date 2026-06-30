@@ -1159,6 +1159,7 @@ async function sendMsg() {
   
   cancelReply();
   input.value = '';
+  updateInputUI();
   socket.emit('typing', { receiver: currentChat, typing: false });
 }
 
