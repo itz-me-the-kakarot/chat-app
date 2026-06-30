@@ -93,6 +93,22 @@ def init_db():
     cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS edited BOOLEAN DEFAULT FALSE')
     cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS file_metadata JSONB')
     cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_group BOOLEAN DEFAULT FALSE')
+    # v7: Stories
+    cur.execute('''CREATE TABLE IF NOT EXISTS stories (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        media_url TEXT NOT NULL,
+        media_type TEXT DEFAULT 'image',
+        caption TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        expires_at TIMESTAMP NOT NULL
+    )''')
+    cur.execute('''CREATE TABLE IF NOT EXISTS story_views (
+        story_id INTEGER REFERENCES stories(id) ON DELETE CASCADE,
+        viewer_id TEXT NOT NULL,
+        viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (story_id, viewer_id)
+    )''')
     
     conn.commit()
     cur.close()
@@ -561,7 +577,156 @@ def react(msg_id):
     if me in connected_users:
         socketio.emit('reaction_update', payload, to=connected_users[me])
     return jsonify({'ok': True, 'reactions': reactions})
+# ── Stories ──────────────────────────────────────────────────
+@app.route('/story', methods=['POST'])
+def create_story():
+    if 'user_id' not in session:
+        return jsonify({'ok': False})
+    me = session['user_id']
+    data = request.json
+    media_url = data.get('media_url')
+    media_type = data.get('media_type', 'image')
+    caption = data.get('caption', '')
+    if not media_url:
+        return jsonify({'ok': False, 'error': 'media_url required'})
+    expires_at = datetime.utcnow() + timedelta(hours=24)
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute('''INSERT INTO stories (user_id, media_url, media_type, caption, expires_at)
+        VALUES (%s,%s,%s,%s,%s) RETURNING id, created_at, expires_at''',
+        (me, media_url, media_type, caption or None, expires_at))
+    row = cur.fetchone()
+    conn.commit()
+    cur.close(); conn.close()
 
+    # Notify friends who are online that a new story dropped
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute('''SELECT CASE WHEN sender=%s THEN receiver ELSE sender END as friend
+        FROM friend_requests WHERE (sender=%s OR receiver=%s) AND status='accepted' ''', (me, me, me))
+    friends = [r['friend'] for r in cur.fetchall()]
+    cur.close(); conn.close()
+    payload = {'story_id': row['id'], 'user_id': me}
+    for f in friends:
+        if f in connected_users:
+            socketio.emit('new_story', payload, to=connected_users[f])
+
+    return jsonify({'ok': True, 'id': row['id'], 'created_at': str(row['created_at']), 'expires_at': str(row['expires_at'])})
+
+@app.route('/stories')
+def get_stories():
+    if 'user_id' not in session:
+        return jsonify([])
+    me = session['user_id']
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute('''SELECT CASE WHEN sender=%s THEN receiver ELSE sender END as friend
+        FROM friend_requests WHERE (sender=%s OR receiver=%s) AND status='accepted' ''', (me, me, me))
+    friends = [r['friend'] for r in cur.fetchall()]
+    user_ids = friends + [me]
+
+    cur.execute('''SELECT s.id, s.user_id, s.media_url, s.media_type, s.caption, s.created_at, s.expires_at,
+            u.display_name, u.avatar_url,
+            EXISTS(SELECT 1 FROM story_views v WHERE v.story_id=s.id AND v.viewer_id=%s) as viewed_by_me
+        FROM stories s
+        JOIN users u ON u.user_id = s.user_id
+        WHERE s.user_id = ANY(%s) AND s.expires_at > NOW()
+        ORDER BY s.user_id, s.created_at ASC''', (me, user_ids))
+    rows = cur.fetchall()
+    cur.close(); conn.close()
+
+    # Group by user_id preserving order, with friends online status
+    grouped = {}
+    order = []
+    for r in rows:
+        uid = r['user_id']
+        if uid not in grouped:
+            grouped[uid] = {
+                'user_id': uid,
+                'display_name': r['display_name'] or uid,
+                'avatar_url': r['avatar_url'],
+                'is_me': uid == me,
+                'has_unviewed': False,
+                'stories': []
+            }
+            order.append(uid)
+        if not r['viewed_by_me'] and uid != me:
+            grouped[uid]['has_unviewed'] = True
+        grouped[uid]['stories'].append({
+            'id': r['id'],
+            'media_url': r['media_url'],
+            'media_type': r['media_type'],
+            'caption': r['caption'],
+            'created_at': str(r['created_at']),
+            'expires_at': str(r['expires_at']),
+            'viewed_by_me': r['viewed_by_me']
+        })
+
+    # Put "me" first if I have stories, then unviewed friends, then viewed friends
+    result = []
+    if me in grouped:
+        result.append(grouped[me])
+    others = [grouped[u] for u in order if u != me]
+    others.sort(key=lambda g: (not g['has_unviewed']))
+    result.extend(others)
+    return jsonify(result)
+
+@app.route('/story/<int:story_id>/view', methods=['POST'])
+def view_story(story_id):
+    if 'user_id' not in session:
+        return jsonify({'ok': False})
+    me = session['user_id']
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute('SELECT user_id FROM stories WHERE id=%s', (story_id,))
+    story = cur.fetchone()
+    if not story:
+        cur.close(); conn.close()
+        return jsonify({'ok': False})
+    if story['user_id'] != me:
+        cur.execute('''INSERT INTO story_views (story_id, viewer_id) VALUES (%s,%s)
+            ON CONFLICT (story_id, viewer_id) DO NOTHING''', (story_id, me))
+        conn.commit()
+    cur.close(); conn.close()
+    return jsonify({'ok': True})
+
+@app.route('/story/<int:story_id>/viewers')
+def story_viewers(story_id):
+    if 'user_id' not in session:
+        return jsonify([])
+    me = session['user_id']
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute('SELECT user_id FROM stories WHERE id=%s', (story_id,))
+    story = cur.fetchone()
+    if not story or story['user_id'] != me:
+        cur.close(); conn.close()
+        return jsonify([])
+    cur.execute('''SELECT v.viewer_id, v.viewed_at, u.display_name, u.avatar_url
+        FROM story_views v JOIN users u ON u.user_id = v.viewer_id
+        WHERE v.story_id=%s ORDER BY v.viewed_at DESC''', (story_id,))
+    rows = cur.fetchall()
+    cur.close(); conn.close()
+    return jsonify([{'user_id': r['viewer_id'], 'display_name': r['display_name'] or r['viewer_id'],
+        'avatar_url': r['avatar_url'], 'viewed_at': str(r['viewed_at'])} for r in rows])
+
+@app.route('/story/<int:story_id>', methods=['DELETE'])
+def delete_story(story_id):
+    if 'user_id' not in session:
+        return jsonify({'ok': False})
+    me = session['user_id']
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute('SELECT user_id FROM stories WHERE id=%s', (story_id,))
+    story = cur.fetchone()
+    if not story or story['user_id'] != me:
+        cur.close(); conn.close()
+        return jsonify({'ok': False})
+    cur.execute('DELETE FROM stories WHERE id=%s', (story_id,))
+    conn.commit()
+    cur.close(); conn.close()
+    return jsonify({'ok': True})
+    
 @app.route('/media/<uid>')
 def get_media(uid):
     if 'user_id' not in session:
@@ -726,6 +891,8 @@ def nuke():
 def reset_db():
     conn = get_db()
     cur = conn.cursor()
+    cur.execute('DROP TABLE IF EXISTS story_views CASCADE')
+    cur.execute('DROP TABLE IF EXISTS stories CASCADE')
     cur.execute('DROP TABLE IF EXISTS messages CASCADE')
     cur.execute('DROP TABLE IF EXISTS friend_requests CASCADE')
     cur.execute('DROP TABLE IF EXISTS chat_settings CASCADE')
