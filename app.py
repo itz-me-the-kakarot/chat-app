@@ -74,6 +74,7 @@ def init_db():
     cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP')
     cur.execute('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS theme_color TEXT')
     cur.execute('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS pinned_msg_id INTEGER')
+    cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS story_ref JSONB')
     
     # v6 features
     cur.execute('''CREATE TABLE IF NOT EXISTS groups (
@@ -613,6 +614,19 @@ def create_story():
 
     return jsonify({'ok': True, 'id': row['id'], 'created_at': str(row['created_at']), 'expires_at': str(row['expires_at'])})
 
+@app.route('/story/<int:story_id>/like', methods=['POST'])
+def like_story(story_id):
+    if 'user_id' not in session: return jsonify({'ok': False})
+    me = session['user_id']
+    conn = get_db(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute('SELECT user_id FROM stories WHERE id=%s', (story_id,))
+    story = cur.fetchone()
+    cur.close(); conn.close()
+    if not story: return jsonify({'ok': False})
+    if story['user_id'] in connected_users:
+        socketio.emit('story_liked', {'story_id': story_id, 'by': me}, to=connected_users[story['user_id']])
+    return jsonify({'ok': True})
+
 @app.route('/stories')
 def get_stories():
     if 'user_id' not in session:
@@ -776,6 +790,7 @@ def handle_private(data):
     reply_to = data.get('reply_to', '')
     poll_data = data.get('poll_data', None)
     file_metadata = data.get('file_metadata', None)
+    story_ref = data.get('story_ref', None)
     
     link_preview = None
     if msg_type == 'text':
@@ -810,9 +825,9 @@ def handle_private(data):
     disappear_at = None
     if settings and settings['disappear_timer'] > 0:
         disappear_at = datetime.utcnow() + timedelta(seconds=settings['disappear_timer'])
-    cur.execute('''INSERT INTO messages (sender,receiver,message,sender_message,msg_type,media_url,reply_to,disappear_at,poll_data,link_preview,delivered_at,file_metadata)
-        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id, timestamp''',
-        (sender, receiver, message, sender_message, msg_type, media_url, reply_to, disappear_at, psycopg2.extras.Json(poll_data) if poll_data else None, psycopg2.extras.Json(link_preview) if link_preview else None, datetime.utcnow(), psycopg2.extras.Json(file_metadata) if file_metadata else None))
+   cur.execute('''INSERT INTO messages (sender,receiver,message,sender_message,msg_type,media_url,reply_to,disappear_at,poll_data,link_preview,delivered_at,file_metadata,story_ref)
+        VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id, timestamp''',
+        (sender, receiver, message, sender_message, msg_type, media_url, reply_to, disappear_at, psycopg2.extras.Json(poll_data) if poll_data else None, psycopg2.extras.Json(link_preview) if link_preview else None, datetime.utcnow(), psycopg2.extras.Json(file_metadata) if file_metadata else None, psycopg2.extras.Json(story_ref) if story_ref else None))
     row = cur.fetchone()
     msg_id = row['id']
     msg_timestamp = str(row['timestamp'])
