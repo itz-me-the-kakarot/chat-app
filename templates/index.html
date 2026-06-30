@@ -1886,7 +1886,7 @@ function likeCurrentStory() {
   fetch(`/story/${s.id}/like`, { method: 'POST' });
   document.getElementById('svLikeBtn').textContent = '❤️';
 }
-sendStoryReply() {
+async function sendStoryReply() {
   const input = document.getElementById('svReplyInput');
   const text = input.value.trim();
   if (!text) return;
