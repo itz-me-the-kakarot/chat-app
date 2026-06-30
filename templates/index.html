@@ -276,6 +276,7 @@
   <div class="search-wrap">
     <input type="text" id="searchInput" placeholder="Search name, username or ID..." oninput="renderTab()"/>
   </div>
+  <div class="story-bar" id="storiesBar"></div>
   <div class="tabs">
     <div class="tab active" onclick="switchTab('chats',this)">Chats</div>
     <div class="tab" onclick="switchTab('requests',this)" id="reqTab">Requests</div>
@@ -890,6 +891,7 @@ async function renderMsg(m, isSent, prepend = false) {
   if (isSent) li.classList.add('sent');
 
   let html = `<div class="msender">${isSent ? 'You' : m.sender}</div>`;
+  if (m.story_ref) html += `<div class="story-ref-prev"><img src="${m.story_ref.thumb}"/><span>Replied to your story</span></div>`;
   if (m.reply_to) html += `<div class="reply-prev">↩ ${m.reply_to}</div>`;
 
   if (m.deleted) {
@@ -1770,6 +1772,127 @@ initKeys().then(async () => {
   await loadProfile();
   renderTab();
 });
+</script>
+<style>
+.story-bar{display:flex;gap:14px;overflow-x:auto;padding:10px 12px;border-bottom:1px solid #1e2a45;flex-shrink:0;}
+.story-item{display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;flex-shrink:0;width:60px;}
+.story-ring{width:54px;height:54px;border-radius:50%;padding:2px;background:linear-gradient(45deg,#f59e0b,#ef4444,#a78bfa);display:flex;align-items:center;justify-content:center;}
+.story-ring.viewed{background:#3a4258;}
+.story-ring .av{width:100%;height:100%;border:2px solid #0a0f1e;}
+.story-item span{font-size:11px;color:#a0aec0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60px;}
+.story-viewer{display:none;position:fixed;inset:0;background:#000;z-index:600;flex-direction:column;}
+.story-viewer.show{display:flex;}
+.story-progress{display:flex;gap:4px;padding:8px;flex-shrink:0;}
+.story-progress .seg{flex:1;height:3px;background:rgba(255,255,255,.3);border-radius:2px;overflow:hidden;}
+.story-progress .seg .fill{height:100%;width:0%;background:#fff;}
+.story-head{display:flex;align-items:center;gap:8px;padding:0 12px 8px;color:#fff;flex-shrink:0;}
+.story-media-wrap{flex:1;display:flex;align-items:center;justify-content:center;position:relative;}
+.story-media-wrap img,.story-media-wrap video{max-width:100%;max-height:100%;}
+.story-reply-row{display:flex;gap:8px;padding:10px;align-items:center;flex-shrink:0;}
+.story-reply-row input{flex:1;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.3);border-radius:20px;padding:10px 16px;color:#fff;outline:none;}
+.story-like-btn{background:none;border:none;font-size:24px;cursor:pointer;}
+.story-close{background:none;border:none;color:#fff;font-size:22px;cursor:pointer;margin-left:auto;}
+.story-ref-prev{display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.2);border-radius:10px;padding:6px;margin-bottom:6px;}
+.story-ref-prev img{width:36px;height:36px;border-radius:8px;object-fit:cover;}
+.story-ref-prev span{font-size:11px;color:#a0aec0;}
+</style>
+
+<div id="storyViewer" class="story-viewer">
+  <div class="story-progress" id="storyProgress"></div>
+  <div class="story-head">
+    <div class="av av-sm" id="svAvatar"></div>
+    <span id="svName" style="font-weight:600;"></span>
+    <button class="story-close" onclick="closeStoryViewer()">✕</button>
+  </div>
+  <div class="story-media-wrap" id="svMediaWrap"></div>
+  <div class="story-reply-row">
+    <button class="story-like-btn" id="svLikeBtn" onclick="likeCurrentStory()">🤍</button>
+    <input type="text" id="svReplyInput" placeholder="Reply to story..." onkeydown="if(event.key==='Enter')sendStoryReply()"/>
+  </div>
+</div>
+
+<script>
+let myStories = [], svUserIdx = 0, svStoryIdx = 0, svTimer = null, svDuration = 5000;
+
+async function loadStoriesBar() {
+  const bar = document.getElementById('storiesBar');
+  if (!bar) return;
+  const data = await fetch('/stories').then(r => r.json());
+  myStories = data;
+  bar.innerHTML = data.map((g, i) => {
+    const av = g.avatar_url ? `<img src="${g.avatar_url}"/>` : (g.display_name||g.user_id)[0].toUpperCase();
+    return `<div class="story-item" onclick="openStoryViewer(${i})">
+      <div class="story-ring ${g.has_unviewed ? '' : 'viewed'}"><div class="av av-md">${av}</div></div>
+      <span>${g.is_me ? 'Your story' : g.display_name}</span>
+    </div>`;
+  }).join('') || '';
+}
+
+function openStoryViewer(uIdx) {
+  svUserIdx = uIdx; svStoryIdx = 0;
+  document.getElementById('storyViewer').classList.add('show');
+  renderStoryProgress();
+  showStory();
+}
+function renderStoryProgress() {
+  const g = myStories[svUserIdx];
+  document.getElementById('storyProgress').innerHTML = g.stories.map((_,i) =>
+    `<div class="seg"><div class="fill" id="svFill${i}"></div></div>`).join('');
+}
+function showStory() {
+  clearTimeout(svTimer);
+  const g = myStories[svUserIdx];
+  const s = g.stories[svStoryIdx];
+  document.getElementById('svAvatar').innerHTML = g.avatar_url ? `<img src="${g.avatar_url}"/>` : (g.display_name||g.user_id)[0].toUpperCase();
+  document.getElementById('svName').textContent = g.display_name;
+  document.getElementById('svLikeBtn').textContent = '🤍';
+  const wrap = document.getElementById('svMediaWrap');
+  wrap.innerHTML = s.media_type === 'video'
+    ? `<video src="${s.media_url}" autoplay muted></video>`
+    : `<img src="${s.media_url}"/>`;
+  document.querySelectorAll('.story-progress .fill').forEach(f => f.style.width = '0%');
+  for (let i = 0; i < svStoryIdx; i++) document.getElementById('svFill'+i).style.width = '100%';
+  if (!g.is_me) fetch(`/story/${s.id}/view`, { method: 'POST' });
+  const fill = document.getElementById('svFill'+svStoryIdx);
+  requestAnimationFrame(() => { fill.style.transition = `width ${svDuration}ms linear`; fill.style.width = '100%'; });
+  svTimer = setTimeout(nextStory, svDuration);
+}
+function nextStory() {
+  const g = myStories[svUserIdx];
+  if (svStoryIdx < g.stories.length - 1) { svStoryIdx++; showStory(); }
+  else if (svUserIdx < myStories.length - 1) { svUserIdx++; svStoryIdx = 0; renderStoryProgress(); showStory(); }
+  else closeStoryViewer();
+}
+function closeStoryViewer() {
+  clearTimeout(svTimer);
+  document.getElementById('storyViewer').classList.remove('show');
+  loadStoriesBar();
+}
+function likeCurrentStory() {
+  const s = myStories[svUserIdx].stories[svStoryIdx];
+  fetch(`/story/${s.id}/like`, { method: 'POST' });
+  document.getElementById('svLikeBtn').textContent = '❤️';
+}
+async function sendStoryReply() {
+  const input = document.getElementById('svReplyInput');
+  const text = input.value.trim();
+  if (!text) return;
+  const g = myStories[svUserIdx];
+  const s = g.stories[svStoryIdx];
+  const rKey = await getPubKey(g.user_id);
+  if (!rKey) { showToast('Cannot reply'); return; }
+  const eR = await enc(rKey, text);
+  const eS = await enc(myPublicKey, text);
+  const story_ref = { story_id: s.id, thumb: s.media_url, caption: s.caption || '' };
+  socket.emit('private_message', { receiver: g.user_id, message: eR, sender_message: eS, msg_type: 'text', story_ref });
+  input.value = '';
+  showToast('Reply sent');
+}
+socket.on('story_liked', d => showToast('Someone liked your story ❤️'));
+socket.on('new_story', d => loadStoriesBar());
+
+const _origLoadProfile = loadProfile;
+loadProfile = async function() { await _origLoadProfile(); loadStoriesBar(); };
 </script>
 </body>
 </html>
