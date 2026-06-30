@@ -2005,7 +2005,6 @@ document.getElementById('svMediaWrap').addEventListener('touchend', e => {
     else if (dx > 0 && svUserIdx > 0) switchUser(svUserIdx - 1, 'left');
   }
 }, { passive: true });
-}
 function closeStoryViewer() {
   clearTimeout(svTimer);
   document.getElementById('storyViewer').classList.remove('show');
