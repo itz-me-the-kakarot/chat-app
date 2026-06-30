@@ -1790,8 +1790,12 @@ initKeys().then(async () => {
 .story-head{display:flex;align-items:center;gap:8px;padding:0 12px 8px;color:#fff;flex-shrink:0;}
 .story-media-wrap{flex:1;display:flex;align-items:center;justify-content:center;position:relative;}
 .story-media-wrap img,.story-media-wrap video{max-width:100%;max-height:100%;}
-.story-reply-row{display:flex;gap:8px;padding:10px;align-items:center;flex-shrink:0;}
-.story-reply-row input{flex:1;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.3);border-radius:20px;padding:10px 16px;color:#fff;outline:none;}
+.story-reply-row{display:flex;align-items:center;padding:14px;gap:10px;flex-shrink:0;}
+.story-reply-pill{flex:1;display:flex;align-items:center;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.4);border-radius:30px;padding:4px 6px 4px 18px;gap:8px;}
+.story-reply-pill input{flex:1;background:transparent;border:none;outline:none;color:#fff;font-size:14px;padding:8px 0;}
+.story-reply-pill input::placeholder{color:rgba(255,255,255,.6);}
+.story-icon-btn{background:none;border:none;font-size:22px;cursor:pointer;color:#fff;padding:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.story-icon-btn svg{width:24px;height:24px;}
 .story-like-btn{background:none;border:none;font-size:24px;cursor:pointer;}
 .story-close{background:none;border:none;color:#fff;font-size:22px;cursor:pointer;margin-left:auto;}
 .story-ref-prev{display:flex;align-items:center;gap:8px;background:rgba(0,0,0,.2);border-radius:10px;padding:6px;margin-bottom:6px;}
@@ -1808,8 +1812,13 @@ initKeys().then(async () => {
   </div>
   <div class="story-media-wrap" id="svMediaWrap"></div>
   <div class="story-reply-row">
-    <button class="story-like-btn" id="svLikeBtn" onclick="likeCurrentStory()">🤍</button>
-    <input type="text" id="svReplyInput" placeholder="Reply to story..." onkeydown="if(event.key==='Enter')sendStoryReply()"/>
+    <div class="story-reply-pill">
+      <input type="text" id="svReplyInput" placeholder="Reply to story..." onkeydown="if(event.key==='Enter')sendStoryReply()"/>
+      <button class="story-icon-btn" id="svLikeBtn" onclick="likeCurrentStory()">🤍</button>
+      <button class="story-icon-btn" onclick="sendStoryReply()">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+      </button>
+    </div>
   </div>
 </div>
 <input type="file" id="storyUploadInput" accept="image/*,video/*" style="display:none" onchange="uploadStory(this)"/>
