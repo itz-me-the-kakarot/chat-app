@@ -1170,6 +1170,7 @@ async function sendFile(input) {
   socket.emit('private_message', { receiver: currentChat, message: '', sender_message: '', msg_type: type, media_url: url, reply_to: replyingTo || '', file_metadata: metadata });
   cancelReply();
   input.value = '';
+  updateInputUI();
 }
 
 // ── Voice messages ────────────────────────────────────────────
