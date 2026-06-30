@@ -1995,6 +1995,55 @@ function tapNextStory() {
   if (svStoryIdx < g.stories.length - 1) { svStoryIdx++; showStory(); }
   // else: do nothing — tap should NOT advance to next person
 }
+let svHoldTimer = null;
+let svHoldFired = false;
+
+function svFreeze() {
+  svPausedForInput = true;
+  clearTimeout(svTimer);
+  const fill = document.getElementById('svFill' + svStoryIdx);
+  if (fill) {
+    const rect = fill.getBoundingClientRect();
+    const parentWidth = fill.parentElement.getBoundingClientRect().width;
+    const pct = parentWidth ? (rect.width / parentWidth) : 0;
+    svRemainingMs = svDuration * (1 - pct);
+    fill.style.transition = 'none';
+    fill.style.width = (pct * 100) + '%';
+  }
+  const vid = document.querySelector('#svMediaWrap video');
+  if (vid) vid.pause();
+}
+
+function svUnfreeze() {
+  svPausedForInput = false;
+  const vid = document.querySelector('#svMediaWrap video');
+  if (vid) vid.play();
+  const fill = document.getElementById('svFill' + svStoryIdx);
+  if (fill && svRemainingMs > 0) {
+    requestAnimationFrame(() => {
+      fill.style.transition = `width ${svRemainingMs}ms linear`;
+      fill.style.width = '100%';
+    });
+    svTimer = setTimeout(nextStory, svRemainingMs);
+  }
+}
+
+const svMediaEl = document.getElementById('svMediaWrap');
+
+svMediaEl.addEventListener('touchstart', () => {
+  svHoldFired = false;
+  svHoldTimer = setTimeout(() => { svHoldFired = true; svFreeze(); }, 180);
+}, { passive: true });
+
+svMediaEl.addEventListener('touchend', () => {
+  clearTimeout(svHoldTimer);
+  if (svHoldFired) { svUnfreeze(); svHoldFired = false; }
+}, { passive: true });
+
+svMediaEl.addEventListener('touchcancel', () => {
+  clearTimeout(svHoldTimer);
+  if (svHoldFired) { svUnfreeze(); svHoldFired = false; }
+}, { passive: true });
 
 document.getElementById('svMediaWrap').addEventListener('click', e => {
   if (svPausedForInput) return;
