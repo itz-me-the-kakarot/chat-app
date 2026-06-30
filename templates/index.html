@@ -1819,10 +1819,34 @@ let myStories = [], svUserIdx = 0, svStoryIdx = 0, svTimer = null, svDuration = 
 async function uploadStory(input) {
   const file = input.files[0];
   if (!file) return;
+  const preview = URL.createObjectURL(file);
+  const isVideo = file.type.startsWith('video');
+  const ok = await confirmStoryPost(preview, isVideo);
+  if (!ok) { input.value = ''; URL.revokeObjectURL(preview); return; }
   const { url, type } = await cloudUpload(file);
   await fetch('/story', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ media_url: url, media_type: type === 'video' ? 'video' : 'image' }) });
   input.value = '';
+  URL.revokeObjectURL(preview);
   loadStoriesBar();
+}
+
+function confirmStoryPost(previewUrl, isVideo) {
+  return new Promise(resolve => {
+    const modal = document.createElement('div');
+    modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:700;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;';
+    modal.innerHTML = `
+      <div style="max-width:320px;max-height:60vh;border-radius:12px;overflow:hidden;">
+        ${isVideo ? `<video src="${previewUrl}" autoplay muted loop style="width:100%;display:block;"></video>` : `<img src="${previewUrl}" style="width:100%;display:block;"/>`}
+      </div>
+      <div style="color:#fff;font-family:'Space Grotesk',sans-serif;font-size:15px;">Share to your story?</div>
+      <div style="display:flex;gap:12px;">
+        <button id="storyCancelBtn" style="padding:10px 24px;border-radius:10px;border:1px solid #4a5568;background:transparent;color:#fff;font-weight:600;cursor:pointer;">Cancel</button>
+        <button id="storyShareBtn" style="padding:10px 24px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;">Share</button>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.querySelector('#storyCancelBtn').onclick = () => { modal.remove(); resolve(false); };
+    modal.querySelector('#storyShareBtn').onclick = () => { modal.remove(); resolve(true); };
+  });
 }
 async function loadStoriesBar() {
   const bar = document.getElementById('storiesBar');
