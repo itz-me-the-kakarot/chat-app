@@ -490,6 +490,7 @@
   <div class="ctx-item" onclick="ctxReply()">↩ Reply</div>
   <div class="ctx-item" onclick="ctxForward()">↪ Forward</div>
   <div class="ctx-item" onclick="ctxPin()">📌 Pin message</div>
+  <div class="ctx-item" id="ctxEdit" onclick="ctxEditMsg()" style="display:none">✏️ Edit message</div>
   <div class="ctx-item danger" id="ctxDelete" onclick="ctxDeleteMsg()" style="display:none">🗑 Delete for everyone</div>
 </div>
 
@@ -906,12 +907,26 @@ async function renderMsg(m, isSent, prepend = false) {
     html += `<video src="${m.media_url}" class="cmedia" controls></video>
       <a href="${m.media_url}" download class="dload">⬇ Save video</a>`;
   } else if (m.msg_type === 'file') {
-    html += `<a href="${m.media_url}" target="_blank" class="dload">📄 Download file</a>`;
+    let fName = 'Document';
+    let fSize = '';
+    if (m.file_metadata) {
+      fName = m.file_metadata.name || 'Document';
+      fSize = m.file_metadata.size ? (m.file_metadata.size / 1024).toFixed(1) + ' KB' : '';
+    }
+    html += `<div style="background:rgba(255,255,255,0.1);padding:10px;border-radius:8px;display:flex;align-items:center;gap:10px;">
+      <div style="font-size:24px;">📄</div>
+      <div style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+        <div style="font-weight:bold;font-size:13px;">${fName}</div>
+        <div style="font-size:11px;color:#a0aec0;">${fSize}</div>
+      </div>
+      <a href="${m.media_url}" target="_blank" class="dload" style="margin-top:0;">⬇</a>
+    </div>`;
   } else if (m.msg_type === 'poll') {
     html += renderPoll(m);
   } else {
     const plain = isSent ? (m.sender_message ? await dec(m.sender_message) : '🔒') : await dec(m.message);
-    html += `<span class="msg-text">${plain}</span>`;
+    let editedHtml = m.edited ? `<small class="edited-badge" style="color:#a0aec0;font-size:11px;margin-left:4px;">(edited)</small>` : '';
+    html += `<span class="msg-text">${plain}${editedHtml}</span>`;
     if (m.link_preview && m.link_preview.title) {
       html += `<a href="${m.link_preview.url}" target="_blank" class="link-preview">
         ${m.link_preview.image ? `<img src="${m.link_preview.image}"/>` : ''}
@@ -1032,11 +1047,12 @@ function showCtxMenu(e, m, isSent) {
   const menu = document.getElementById('ctxMenu');
   const emojis = document.getElementById('ctxEmojis');
   emojis.innerHTML = EMOJIS.map(em => `<span onclick="reactTo(${m.id},'${em}');hideCtx()">${em}</span>`).join('');
+  document.getElementById('ctxEdit').style.display = isSent && !m.deleted && m.msg_type === 'text' ? 'flex' : 'none';
   document.getElementById('ctxDelete').style.display = isSent && !m.deleted ? 'flex' : 'none';
   menu.classList.add('show');
   const touch = e.touches ? e.touches[0] : e;
   const x = Math.min(touch.clientX, window.innerWidth - 180);
-  const y = Math.min(touch.clientY, window.innerHeight - 200);
+  const y = Math.min(touch.clientY, window.innerHeight - 240);
   menu.style.left = x + 'px';
   menu.style.top = y + 'px';
   document.addEventListener('touchstart', hideCtxOnOutside, { once: true });
@@ -1060,7 +1076,16 @@ function ctxForward() {
   if (!ctxMsgText) { alert('Can only forward text messages'); return; }
   const friends = prompt('Forward to username:');
   if (friends && ctxMsgText) {
-    alert('Forwarding: "' + ctxMsgText + '" to ' + friends + '\n(Open chat with them to forward)');
+    const msg = ctxMsgText;
+    getPubKey(friends).then(rKey => {
+      if (!rKey) { alert('User not found or no key'); return; }
+      enc(rKey, msg).then(eR => {
+        enc(myPublicKey, msg).then(eS => {
+          socket.emit('private_message', { receiver: friends, message: eR, sender_message: eS, msg_type: 'text', reply_to: '' });
+          alert('Forwarded to ' + friends);
+        });
+      });
+    });
   }
 }
 
@@ -1069,7 +1094,24 @@ async function ctxDeleteMsg() {
   if (!ctxMsgId) return;
   await fetch('/delete_message/' + ctxMsgId, { method: 'POST' });
   const li = document.getElementById('msg-' + ctxMsgId);
-  if (li) li.querySelector('span') ? li.querySelector('span').textContent = 'This message was deleted' : null;
+  if (li) {
+    li.innerHTML = '<span class="deleted-text" style="color:#a0aec0;font-style:italic;font-size:13px">This message was deleted</span>';
+  }
+}
+
+let editingMsgId = null;
+
+function ctxEditMsg() {
+  hideCtx();
+  if (!ctxMsgId || !ctxMsgText) return;
+  editingMsgId = ctxMsgId;
+  const input = document.getElementById('msgInput');
+  input.value = ctxMsgText;
+  input.focus();
+  // Show an editing indicator
+  const replyBar = document.getElementById('replyBar');
+  document.getElementById('replyText').textContent = 'Editing message...';
+  replyBar.style.display = 'flex';
 }
 
 async function reactTo(msgId, emoji) {
@@ -1099,7 +1141,18 @@ async function sendMsg() {
   if (!rKey) { alert('Cannot get recipient key'); return; }
   const eR = await enc(rKey, msg);
   const eS = await enc(myPublicKey, msg);
-  socket.emit('private_message', { receiver: currentChat, message: eR, sender_message: eS, msg_type: 'text', reply_to: replyingTo || '' });
+  
+  if (editingMsgId) {
+    await fetch('/edit_message/' + editingMsgId, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: eR, sender_message: eS })
+    });
+    editingMsgId = null;
+  } else {
+    socket.emit('private_message', { receiver: currentChat, message: eR, sender_message: eS, msg_type: 'text', reply_to: replyingTo || '' });
+  }
+  
   cancelReply();
   input.value = '';
   socket.emit('typing', { receiver: currentChat, typing: false });
@@ -1109,7 +1162,8 @@ async function sendFile(input) {
   const file = input.files[0];
   if (!file || !currentChat) return;
   const { url, type } = await cloudUpload(file);
-  socket.emit('private_message', { receiver: currentChat, message: '', sender_message: '', msg_type: type, media_url: url, reply_to: replyingTo || '' });
+  const metadata = { name: file.name, size: file.size, type: file.type };
+  socket.emit('private_message', { receiver: currentChat, message: '', sender_message: '', msg_type: type, media_url: url, reply_to: replyingTo || '', file_metadata: metadata });
   cancelReply();
   input.value = '';
 }
@@ -1624,8 +1678,33 @@ socket.on('message_pinned', function(data) {
 socket.on('message_deleted', function(data) {
   const li = document.getElementById('msg-' + data.id);
   if (li) {
-    const span = li.querySelector('span');
-    if (span) { span.textContent = 'This message was deleted'; span.className = 'del-text'; }
+    li.innerHTML = '<span class="deleted-text" style="color:#a0aec0;font-style:italic;font-size:13px">This message was deleted</span>';
+  }
+});
+
+socket.on('message_edited', async function(data) {
+  const li = document.getElementById('msg-' + data.id);
+  if (li) {
+    const span = li.querySelector('span:not(.deleted-text)');
+    if (span) {
+      // Decode if needed
+      let plain = data.message;
+      if (data.sender === me && data.sender_message) {
+         plain = await dec(data.sender_message);
+      } else if (data.sender !== me && !data.is_group) {
+         plain = await dec(data.message);
+      }
+      span.textContent = plain;
+      if (!li.querySelector('.edited-badge')) {
+        const badge = document.createElement('small');
+        badge.className = 'edited-badge';
+        badge.textContent = ' (edited)';
+        badge.style.color = '#a0aec0';
+        badge.style.fontSize = '11px';
+        badge.style.marginLeft = '4px';
+        span.appendChild(badge);
+      }
+    }
   }
 });
 
