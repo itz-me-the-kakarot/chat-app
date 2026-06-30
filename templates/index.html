@@ -1892,7 +1892,7 @@ function showStory() {
   const s = g.stories[svStoryIdx];
   document.getElementById('svAvatar').innerHTML = g.avatar_url ? `<img src="${g.avatar_url}"/>` : (g.display_name||g.user_id)[0].toUpperCase();
   document.getElementById('svName').textContent = g.display_name;
-  document.getElementById('svLikeBtn').textContent = '🤍';
+  document.getElementById('svLikeBtn').textContent = '♡';
   const wrap = document.getElementById('svMediaWrap');
   wrap.innerHTML = s.media_type === 'video'
     ? `<video src="${s.media_url}" autoplay muted></video>`
@@ -1918,7 +1918,7 @@ function closeStoryViewer() {
 function likeCurrentStory() {
   const s = myStories[svUserIdx].stories[svStoryIdx];
   fetch(`/story/${s.id}/like`, { method: 'POST' });
-  document.getElementById('svLikeBtn').textContent = '❤️';
+  document.getElementById('svLikeBtn').textContent = '♥';
 }
 async function sendStoryReply() {
   const input = document.getElementById('svReplyInput');
