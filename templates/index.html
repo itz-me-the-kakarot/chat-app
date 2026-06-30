@@ -1793,8 +1793,8 @@ initKeys().then(async () => {
 .story-progress .seg{flex:1;height:3px;background:rgba(255,255,255,.3);border-radius:2px;overflow:hidden;}
 .story-progress .seg .fill{height:100%;width:0%;background:#fff;}
 .story-head{display:flex;align-items:center;gap:8px;padding:0 12px 8px;color:#fff;flex-shrink:0;}
-.story-viewer{perspective:1200px;}
-.story-media-wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;transition:transform 0.35s ease;}
+.story-viewer{perspective:1000px;}
+.story-media-wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;transition:transform 0.4s ease;transform-style:preserve-3d;transform-origin:center center;will-change:transform;}
 .story-media-wrap.cube-out-left{transform:rotateY(-90deg);}
 .story-media-wrap.cube-out-right{transform:rotateY(90deg);}
 .story-media-wrap.cube-in-from-right{transform:rotateY(90deg);}
@@ -1943,8 +1943,12 @@ function showStory() {
   wrap.innerHTML = s.media_type === 'video'
     ? `<video src="${s.media_url}" autoplay muted></video>`
     : `<img src="${s.media_url}"/>`;
-  document.querySelectorAll('.story-progress .fill').forEach(f => f.style.width = '0%');
-  for (let i = 0; i < svStoryIdx; i++) document.getElementById('svFill'+i).style.width = '100%';
+  document.querySelectorAll('.story-progress .fill').forEach(f => {
+  f.style.transition = 'none';
+  f.style.width = '0%';
+});
+void document.getElementById('storyProgress').offsetWidth; // force reflow
+for (let i = 0; i < svStoryIdx; i++) document.getElementById('svFill'+i).style.width = '100%';
   if (!g.is_me) fetch(`/story/${s.id}/view`, { method: 'POST' });
   const fill = document.getElementById('svFill'+svStoryIdx);
   requestAnimationFrame(() => { fill.style.transition = `width ${svDuration}ms linear`; fill.style.width = '100%'; });
@@ -1982,14 +1986,22 @@ function switchUser(newIdx, dir) {
 }
 
 // Tap zones: left third = prev, right two-thirds = next
+function tapPrevStory() {
+  if (svStoryIdx > 0) { svStoryIdx--; showStory(); }
+}
+function tapNextStory() {
+  const g = myStories[svUserIdx];
+  if (svStoryIdx < g.stories.length - 1) { svStoryIdx++; showStory(); }
+  // else: do nothing — tap should NOT advance to next person
+}
+
 document.getElementById('svMediaWrap').addEventListener('click', e => {
   if (svPausedForInput) return;
   const rect = e.currentTarget.getBoundingClientRect();
   const x = e.clientX - rect.left;
-  if (x < rect.width * 0.3) prevStory();
-  else nextStory();
+  if (x < rect.width * 0.3) tapPrevStory();
+  else tapNextStory();
 });
-
 // Swipe left/right = jump between people (cube effect)
 let svTouchStartX = 0, svTouchStartY = 0;
 document.getElementById('svMediaWrap').addEventListener('touchstart', e => {
