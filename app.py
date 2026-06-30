@@ -623,6 +623,8 @@ def like_story(story_id):
     story = cur.fetchone()
     cur.close(); conn.close()
     if not story: return jsonify({'ok': False})
+    if story['user_id'] != me and not are_friends(me, story['user_id']):
+        return jsonify({'ok': False, 'error': 'not a friend'})
     if story['user_id'] in connected_users:
         socketio.emit('story_liked', {'story_id': story_id, 'by': me}, to=connected_users[story['user_id']])
     return jsonify({'ok': True})
@@ -695,6 +697,9 @@ def view_story(story_id):
     cur.execute('SELECT user_id FROM stories WHERE id=%s', (story_id,))
     story = cur.fetchone()
     if not story:
+        cur.close(); conn.close()
+        return jsonify({'ok': False})
+    if story['user_id'] != me and not are_friends(me, story['user_id']):
         cur.close(); conn.close()
         return jsonify({'ok': False})
     if story['user_id'] != me:
