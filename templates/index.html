@@ -1793,7 +1793,12 @@ initKeys().then(async () => {
 .story-progress .seg{flex:1;height:3px;background:rgba(255,255,255,.3);border-radius:2px;overflow:hidden;}
 .story-progress .seg .fill{height:100%;width:0%;background:#fff;}
 .story-head{display:flex;align-items:center;gap:8px;padding:0 12px 8px;color:#fff;flex-shrink:0;}
-.story-media-wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;}
+.story-viewer{perspective:1200px;}
+.story-media-wrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;transform-style:preserve-3d;transition:transform 0.35s ease;backface-visibility:hidden;}
+.story-media-wrap.cube-out-left{transform:rotateY(-90deg);}
+.story-media-wrap.cube-out-right{transform:rotateY(90deg);}
+.story-media-wrap.cube-in-from-right{transform:rotateY(90deg);}
+.story-media-wrap.cube-in-from-left{transform:rotateY(-90deg);}
 .story-media-wrap img,.story-media-wrap video{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;}
 .story-reply-row{display:flex;align-items:center;padding:14px;gap:10px;flex-shrink:0;}
 .story-reply-pill{flex:1;display:flex;align-items:center;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.4);border-radius:30px;padding:4px 6px 4px 18px;gap:8px;}
@@ -1948,8 +1953,58 @@ function showStory() {
 function nextStory() {
   const g = myStories[svUserIdx];
   if (svStoryIdx < g.stories.length - 1) { svStoryIdx++; showStory(); }
-  else if (svUserIdx < myStories.length - 1) { svUserIdx++; svStoryIdx = 0; renderStoryProgress(); showStory(); }
+  else if (svUserIdx < myStories.length - 1) { switchUser(svUserIdx + 1, 'right'); }
   else closeStoryViewer();
+}
+
+function prevStory() {
+  if (svStoryIdx > 0) { svStoryIdx--; showStory(); }
+  else if (svUserIdx > 0) { switchUser(svUserIdx - 1, 'left'); }
+}
+
+function switchUser(newIdx, dir) {
+  clearTimeout(svTimer);
+  const wrap = document.getElementById('svMediaWrap');
+  wrap.classList.add(dir === 'right' ? 'cube-out-left' : 'cube-out-right');
+  setTimeout(() => {
+    svUserIdx = newIdx;
+    svStoryIdx = 0;
+    renderStoryProgress();
+    wrap.classList.remove('cube-out-left', 'cube-out-right');
+    wrap.classList.add(dir === 'right' ? 'cube-in-from-right' : 'cube-in-from-left');
+    showStory();
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        wrap.classList.remove('cube-in-from-right', 'cube-in-from-left');
+      });
+    });
+  }, 350);
+}
+
+// Tap zones: left third = prev, right two-thirds = next
+document.getElementById('svMediaWrap').addEventListener('click', e => {
+  if (svPausedForInput) return;
+  const rect = e.currentTarget.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  if (x < rect.width * 0.3) prevStory();
+  else nextStory();
+});
+
+// Swipe left/right = jump between people (cube effect)
+let svTouchStartX = 0, svTouchStartY = 0;
+document.getElementById('svMediaWrap').addEventListener('touchstart', e => {
+  svTouchStartX = e.touches[0].clientX;
+  svTouchStartY = e.touches[0].clientY;
+}, { passive: true });
+
+document.getElementById('svMediaWrap').addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - svTouchStartX;
+  const dy = e.changedTouches[0].clientY - svTouchStartY;
+  if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy)) {
+    if (dx < 0 && svUserIdx < myStories.length - 1) switchUser(svUserIdx + 1, 'right');
+    else if (dx > 0 && svUserIdx > 0) switchUser(svUserIdx - 1, 'left');
+  }
+}, { passive: true });
 }
 function closeStoryViewer() {
   clearTimeout(svTimer);
