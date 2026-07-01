@@ -83,6 +83,37 @@
     showBtns(true, true, false, false, false, false);
     timerEl().style.display = 'none';
   }
+  async function sendEncryptedMsg (peer, text) {
+    if (typeof socket === 'undefined' || !peer) return;
+    try {
+      if (typeof getPubKey === 'function' && typeof enc === 'function' && myPublicKey) {
+        const rKey = await getPubKey(peer);
+        if (rKey) {
+          const eR = await enc(rKey, text);
+          const eS = await enc(myPublicKey, text);
+          socket.emit('private_message', {
+            receiver: peer,
+            message: eR,
+            sender_message: eS,
+            msg_type: 'text',
+            reply_to: ''
+          });
+          return;
+        }
+      }
+    } catch (err) {
+      console.error('Failed to encrypt call message:', err);
+    }
+    // Fallback
+    socket.emit('private_message', {
+      receiver: peer,
+      message: text,
+      sender_message: text,
+      msg_type: 'text',
+      reply_to: ''
+    });
+  }
+
   function showConnectedUI () {
     setStatus('🔊 ' + callPeer);
     setRinging(false);
@@ -93,13 +124,7 @@
     if (isCaller && !wasConnected) {
       wasConnected = true;
       const startTimeStr = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-      socket.emit('private_message', {
-        receiver: callPeer,
-        message: `📞 Call started at ${startTimeStr}`,
-        sender_message: `📞 Call started at ${startTimeStr}`,
-        msg_type: 'text',
-        reply_to: ''
-      });
+      sendEncryptedMsg(callPeer, `📞 Call started at ${startTimeStr}`);
     }
   }
 
@@ -133,13 +158,7 @@
 
     if (isCaller && wasConnected && callPeer) {
       const endTimeStr = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-      socket.emit('private_message', {
-        receiver: callPeer,
-        message: `📞 Call ended at ${endTimeStr}`,
-        sender_message: `📞 Call ended at ${endTimeStr}`,
-        msg_type: 'text',
-        reply_to: ''
-      });
+      sendEncryptedMsg(callPeer, `📞 Call ended at ${endTimeStr}`);
     }
     wasConnected = false;
 
@@ -164,16 +183,7 @@
 
   /* ── Missed call message ───────────────────────────────── */
   function sendMissedMsg (peer) {
-    if (typeof socket !== 'undefined' && peer) {
-      // Send same text in both fields so both parties see it regardless of encryption state
-      socket.emit('private_message', {
-        receiver: peer,
-        message: '📵 Missed voice call',
-        sender_message: '📵 Missed voice call',
-        msg_type: 'text',
-        reply_to: ''
-      });
-    }
+    sendEncryptedMsg(peer, '📵 Missed voice call');
   }
 
   /* ── RTCPeerConnection factory ─────────────────────────── */
