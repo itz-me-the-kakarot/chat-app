@@ -86,11 +86,14 @@
   async function sendEncryptedMsg (peer, text) {
     if (typeof socket === 'undefined' || !peer) return;
     try {
-      if (typeof getPubKey === 'function' && typeof enc === 'function' && myPublicKey) {
+      let pubKeyToUse = null;
+      try { pubKeyToUse = myPublicKey; } catch (e) {}
+
+      if (typeof getPubKey === 'function' && typeof enc === 'function' && pubKeyToUse) {
         const rKey = await getPubKey(peer);
         if (rKey) {
           const eR = await enc(rKey, text);
-          const eS = await enc(myPublicKey, text);
+          const eS = await enc(pubKeyToUse, text);
           socket.emit('private_message', {
             receiver: peer,
             message: eR,
@@ -98,20 +101,11 @@
             msg_type: 'text',
             reply_to: ''
           });
-          return;
         }
       }
     } catch (err) {
       console.error('Failed to encrypt call message:', err);
     }
-    // Fallback
-    socket.emit('private_message', {
-      receiver: peer,
-      message: text,
-      sender_message: text,
-      msg_type: 'text',
-      reply_to: ''
-    });
   }
 
   function showConnectedUI () {
