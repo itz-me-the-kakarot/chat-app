@@ -20,6 +20,7 @@
   let candidateQueue = [];
   let onHold         = false;
   let speakerOn      = true;
+  let wasConnected   = false;
 
   const STUN_CFG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
@@ -88,6 +89,18 @@
     showBtns(false, false, true, true, true, true);
     timerEl().style.display = 'block';
     startTimer();
+
+    if (isCaller && !wasConnected) {
+      wasConnected = true;
+      const startTimeStr = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      socket.emit('private_message', {
+        receiver: callPeer,
+        message: `📞 Call started at ${startTimeStr}`,
+        sender_message: `📞 Call started at ${startTimeStr}`,
+        msg_type: 'text',
+        reply_to: ''
+      });
+    }
   }
 
   /* ── Timer ─────────────────────────────────────────────── */
@@ -117,6 +130,19 @@
     const ra = remoteAudio(); if (ra) { ra.srcObject = null; ra.muted = false; ra.volume = 1.0; }
     pendingOffer = null;
     candidateQueue = [];
+
+    if (isCaller && wasConnected && callPeer) {
+      const endTimeStr = new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      socket.emit('private_message', {
+        receiver: callPeer,
+        message: `📞 Call ended at ${endTimeStr}`,
+        sender_message: `📞 Call ended at ${endTimeStr}`,
+        msg_type: 'text',
+        reply_to: ''
+      });
+    }
+    wasConnected = false;
+
     callPeer = null; isCaller = false; muted = false; callActive = false;
     onHold = false;
     speakerOn = true;
