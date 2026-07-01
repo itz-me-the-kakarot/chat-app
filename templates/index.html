@@ -585,14 +585,14 @@
 <div id="chatScreen" class="screen">
   <div class="top-bar">
     <button class="back-btn" onclick="goBack()">&#8592;</button>
-    <div class="chat-header-info" onclick="openChatProfile()">
-      <div class="av av-md" id="chatAv"></div>
+    <div class="chat-header-info">
+      <div id="chatAvWrapper" style="display:flex;align-items:center;justify-content:center;flex-shrink:0;"></div>
       <div class="chat-header-text">
         <div id="chatName" style="font-family:'Space Grotesk',sans-serif;font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"></div>
         <div id="chatStatus" style="font-size:12px;color:var(--accent);"></div>
       </div>
     </div>
-    <button class="icon-btn" onclick="showToast('Coming soon')" title="Call">
+    <button class="icon-btn" onclick="initiateCall(currentChat)" title="Call">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
     </button>
     <button class="icon-btn" onclick="toggleChatSearch()" title="Search">🔍</button>
@@ -1273,8 +1273,22 @@ function makeUserItem(u, mode) {
   let action = '';
   if (mode === 'add') action = `<button class="btn-xs btn-outline" onclick="addFriend('${u.user_id}')">Add</button>`;
   if (mode === 'friend') action = `<button class="remove-btn" onclick="removeFriend(event,'${u.user_id}')">✕</button>`;
+  
+  // Find story
+  const storyIdx = myStories.findIndex(s => s.user_id === u.user_id);
+  let avSection = '';
+  if (storyIdx !== -1 && mode === 'friend') {
+    const sGroup = myStories[storyIdx];
+    avSection = `
+      <div class="story-ring ${sGroup.has_unviewed ? '' : 'viewed'}" style="width: 44px; height: 44px; padding: 2px; cursor: pointer; flex-shrink: 0; margin-right: 8px;" onclick="event.stopPropagation(); openStoryViewer(${storyIdx});">
+        <div class="av" style="width: 100%; height: 100%; margin:0; border: 2px solid var(--bg-primary);">${avC}${badge}</div>
+      </div>`;
+  } else {
+    avSection = `<div class="av av-md">${avC}${badge}</div>`;
+  }
+  
   div.innerHTML = `
-    <div class="av av-md">${avC}${badge}</div>
+    ${avSection}
     <div class="item-info">
       <div class="name">${u.display_name || u.username}</div>
       <div class="sub">#${u.user_id||'0000'} · ${u.online?'online':'offline'}</div>
@@ -1314,8 +1328,19 @@ async function openChat(username) {
 
   // Avatar
   const up = await fetch('/profile/' + username).then(r => r.json());
-  const avEl = document.getElementById('chatAv');
-  avEl.innerHTML = up.avatar_url ? `<img src="${up.avatar_url}"/>` : (up.display_name||username)[0].toUpperCase();
+  const avWrapper = document.getElementById('chatAvWrapper');
+  const avHtml = up.avatar_url ? `<img src="${up.avatar_url}"/>` : (up.display_name||username)[0].toUpperCase();
+  
+  const storyIdx = myStories.findIndex(s => s.user_id === username);
+  if (storyIdx !== -1) {
+    const sGroup = myStories[storyIdx];
+    avWrapper.innerHTML = `
+      <div class="story-ring ${sGroup.has_unviewed ? '' : 'viewed'}" style="width: 42px; height: 42px; padding: 2.5px; cursor: pointer;" onclick="event.stopPropagation(); openStoryViewer(${storyIdx});">
+        <div class="av" id="chatAv" style="width: 100%; height: 100%; border: 2px solid var(--bg-secondary);">${avHtml}</div>
+      </div>`;
+  } else {
+    avWrapper.innerHTML = `<div class="av av-md" id="chatAv" onclick="openChatProfile()">${avHtml}</div>`;
+  }
   document.getElementById('chatName').textContent = up.display_name || username;
 
   // Chat settings & Themes
@@ -2251,7 +2276,7 @@ window.addEventListener('resize', () => {
 .story-item{display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;flex-shrink:0;width:60px;}
 .story-ring{width:54px;height:54px;border-radius:50%;padding:3px;background:linear-gradient(45deg,#ff6a00,#ff9500);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 1.5px #ff7700,0 0 10px 3px rgba(255,120,0,0.7),0 0 22px 6px rgba(255,90,0,0.4);}
 .story-ring.viewed{background:#3a4258;box-shadow:none;}
-.story-ring .av{width:100%;height:100%;border:2px solid #0a0f1e;}
+.story-ring .av{width:100%;height:100%;border:2px solid var(--bg-primary);}
 .story-item span{font-size:11px;color:#a0aec0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60px;}
 .story-viewer{display:none;position:fixed;inset:0;background:#000;z-index:600;flex-direction:column;overflow:hidden;}
 .story-viewer.show{display:flex;}
