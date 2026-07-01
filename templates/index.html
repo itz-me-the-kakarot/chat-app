@@ -400,6 +400,31 @@
     /* Chat settings */
     #chatSettingsScreen { background:var(--bg-primary); overflow-y:auto; }
     .theme-picker { display:flex; gap:10px; margin-top:8px; flex-wrap:wrap; }
+    /* ── Sliding glassy glider (light mode only) ── */
+    #navGlider {
+      display: none;
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      height: 46px;
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.72);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid rgba(255,255,255,0.9);
+      box-shadow:
+        0 2px 12px rgba(0,0,0,0.10),
+        0 1px 3px rgba(0,0,0,0.07),
+        inset 0 1px 0 rgba(255,255,255,1);
+      transition: left 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), width 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+      pointer-events: none;
+      z-index: 0;
+    }
+    /* Only show in light mode */
+    body.mode-light #navGlider { display: block; }
+    /* Tabs sit above glider */
+    .bottom-nav-pill .tab { z-index: 1; }
+
     .theme-swatch { width:32px; height:32px; border-radius:50%; cursor:pointer; border:2px solid transparent; }
     .theme-swatch.active { border-color:var(--text-primary); transform:scale(1.1); }
 
@@ -721,12 +746,14 @@
 </div>
 <!-- Premium Bottom Navigation Pill -->
 <div class="bottom-nav-pill" id="bottomNavPill">
+  <!-- Sliding glassy indicator (light mode) -->
+  <div id="navGlider"></div>
   <div class="tab active" onclick="switchNavTab('chats', this)" id="navChatsTab">
     <span class="tab-icon">💬</span>
     <span class="tab-label">Chats</span>
   </div>
   <div class="tab" onclick="switchNavTab('requests', this)" id="navRequestsTab">
-    <span class="tab-icon">👥</span>
+    <span class="tab-icon">🔔</span>
     <span class="tab-label">Requests</span>
   </div>
   <div class="tab" onclick="switchNavTab('add', this)" id="navAddTab">
@@ -843,12 +870,17 @@ function showScreen(id) {
     restoreGlobalTheme();
     
     document.querySelectorAll('.bottom-nav-pill .tab').forEach(t => t.classList.remove('active'));
+    let activeNavTab;
     if (id === 'profileScreen') {
-      document.getElementById('navProfileTab').classList.add('active');
+      activeNavTab = document.getElementById('navProfileTab');
     } else {
-      if (currentTab === 'chats') document.getElementById('navChatsTab').classList.add('active');
-      if (currentTab === 'requests') document.getElementById('navRequestsTab').classList.add('active');
-      if (currentTab === 'add') document.getElementById('navAddTab').classList.add('active');
+      if (currentTab === 'chats') activeNavTab = document.getElementById('navChatsTab');
+      if (currentTab === 'requests') activeNavTab = document.getElementById('navRequestsTab');
+      if (currentTab === 'add') activeNavTab = document.getElementById('navAddTab');
+    }
+    if (activeNavTab) {
+      activeNavTab.classList.add('active');
+      requestAnimationFrame(() => moveNavGlider(activeNavTab));
     }
   } else {
     navPill.classList.add('hidden');
@@ -857,6 +889,17 @@ function showScreen(id) {
   if (id !== 'contactsScreen') {
     history.pushState({ screen: id }, '', window.location.pathname);
   }
+}
+
+function moveNavGlider(activeTab) {
+  const pill = document.getElementById('bottomNavPill');
+  const glider = document.getElementById('navGlider');
+  if (!glider || !activeTab) return;
+  const pillRect = pill.getBoundingClientRect();
+  const tabRect = activeTab.getBoundingClientRect();
+  const padding = 6;
+  glider.style.left = (tabRect.left - pillRect.left - padding) + 'px';
+  glider.style.width = (tabRect.width + padding * 2) + 'px';
 }
 
 function switchNavTab(tab, el) {
@@ -868,6 +911,8 @@ function switchNavTab(tab, el) {
     document.getElementById('searchInput').value = '';
     renderTab();
   }
+  // Move the glider to the clicked tab
+  moveNavGlider(el);
 }
 
 window.addEventListener('popstate', function(e) {
@@ -2086,6 +2131,12 @@ initKeys().then(async () => {
   socket.connect();
   await loadProfile();
   renderTab();
+  // Init glider on the default active tab after layout is ready
+  requestAnimationFrame(() => moveNavGlider(document.getElementById('navChatsTab')));
+});
+window.addEventListener('resize', () => {
+  const active = document.querySelector('.bottom-nav-pill .tab.active');
+  if (active) moveNavGlider(active);
 });
 </script>
 <style>
