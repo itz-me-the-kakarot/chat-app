@@ -18,6 +18,8 @@
   let callActive    = false;
   let pendingOffer  = null;  // SDP offer stored while callee decides
   let candidateQueue = [];
+  let onHold         = false;
+  let speakerOn      = true;
 
   const STUN_CFG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
@@ -33,11 +35,13 @@
   const remoteAudio = () => $('remoteAudio');
 
   /* Show / hide wrappers (not individual buttons) */
-  function showBtns (accept, decline, mute, hangup) {
+  function showBtns (accept, decline, mute, hold, speaker, hangup) {
     const show = (id, v) => { const el = $(id); if (el) el.style.display = v ? 'flex' : 'none'; };
     show('acceptWrap',  accept);
     show('declineWrap', decline);
     show('muteWrap',    mute);
+    show('holdWrap',    hold);
+    show('speakerWrap', speaker);
     show('hangupWrap',  hangup);
   }
 
@@ -68,20 +72,20 @@
     setStatus('Calling ' + callPeer + '…');
     setAvatar(callPeer);
     setRinging(true);
-    showBtns(false, false, true, true);
+    showBtns(false, false, true, false, true, true);
     timerEl().style.display = 'none';
   }
   function showCalleeUI (from) {
     setStatus('Incoming call from ' + from);
     setAvatar(from);
     setRinging(true);
-    showBtns(true, true, false, false);
+    showBtns(true, true, false, false, false, false);
     timerEl().style.display = 'none';
   }
   function showConnectedUI () {
     setStatus('🔊 ' + callPeer);
     setRinging(false);
-    showBtns(false, false, true, true);
+    showBtns(false, false, true, true, true, true);
     timerEl().style.display = 'block';
     startTimer();
   }
@@ -110,15 +114,25 @@
     setRinging(false);
     if (pc)          { pc.close();  pc = null; }
     if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
-    const ra = remoteAudio(); if (ra) ra.srcObject = null;
+    const ra = remoteAudio(); if (ra) { ra.srcObject = null; ra.muted = false; ra.volume = 1.0; }
     pendingOffer = null;
     candidateQueue = [];
     callPeer = null; isCaller = false; muted = false; callActive = false;
+    onHold = false;
+    speakerOn = true;
     // Reset mute button state
     const mb = muteBtn();
     if (mb) { mb.textContent = '🎙️'; mb.classList.remove('muted'); }
     const ml = muteLbl();
     if (ml) ml.textContent = 'Mute';
+    const hb = $('holdBtn');
+    if (hb) { hb.textContent = '⏸️'; hb.classList.remove('muted'); }
+    const hl = $('holdBtnLabel');
+    if (hl) hl.textContent = 'Hold';
+    const sb = $('speakerBtn');
+    if (sb) { sb.textContent = '🔊'; sb.classList.remove('muted'); }
+    const sl = $('speakerBtnLabel');
+    if (sl) sl.textContent = 'Speaker';
     hideModal();
   }
 
@@ -229,7 +243,7 @@
   function toggleMute () {
     if (!localStream) return;
     muted = !muted;
-    localStream.getAudioTracks().forEach(t => { t.enabled = !muted; });
+    localStream.getAudioTracks().forEach(t => { t.enabled = !muted && !onHold; });
     const mb = muteBtn();
     const ml = muteLbl();
     if (mb) {
@@ -239,11 +253,52 @@
     if (ml) ml.textContent = muted ? 'Unmute' : 'Mute';
   }
 
+  /* ── Hold toggle ───────────────────────────────────────── */
+  function toggleHold () {
+    if (!localStream) return;
+    onHold = !onHold;
+    // Mute local microphone
+    localStream.getAudioTracks().forEach(t => { t.enabled = !onHold && !muted; });
+    // Mute remote audio element
+    const ra = remoteAudio();
+    if (ra) ra.muted = onHold;
+
+    const hb = $('holdBtn');
+    const hl = $('holdBtnLabel');
+    if (hb) {
+      hb.textContent = onHold ? '▶️' : '⏸️';
+      hb.classList.toggle('muted', onHold);
+    }
+    if (hl) hl.textContent = onHold ? 'Resume' : 'Hold';
+    setStatus(onHold ? '⏸️ On Hold' : '🔊 ' + callPeer);
+  }
+
+  /* ── Speaker toggle ────────────────────────────────────── */
+  function toggleSpeaker () {
+    speakerOn = !speakerOn;
+    const ra = remoteAudio();
+    if (ra) {
+      ra.volume = speakerOn ? 1.0 : 0.15;
+    }
+    const sb = $('speakerBtn');
+    const sl = $('speakerBtnLabel');
+    if (sb) {
+      sb.textContent = speakerOn ? '🔊' : '🔈';
+      sb.classList.toggle('muted', !speakerOn);
+    }
+    if (sl) sl.textContent = speakerOn ? 'Speaker' : 'Earpiece';
+    if (typeof showToast === 'function') {
+      showToast(speakerOn ? 'Speaker mode active' : 'Earpiece mode active');
+    }
+  }
+
   /* ── Expose globals (called by inline onclick in modal) ── */
   window.initiateCall  = initiateCall;
   window._callAccept   = acceptCall;
   window._callDecline  = () => { socket.emit('call-end', { to: callPeer, reason: 'declined' }); cleanup(); };
   window._callMute     = toggleMute;
+  window._callHold     = toggleHold;
+  window._callSpeaker  = toggleSpeaker;
   window._callHangup   = () => hangUp(true);
 
   /* ── Socket listeners ──────────────────────────────────── */
@@ -305,9 +360,10 @@
     /* Both: call ended / declined / missed */
     socket.on('call-end', (data) => {
       const reason = (data || {}).reason || 'ended';
+      const senderName = (data && data.from) || callPeer || 'Receiver';
       const msgs = {
-        declined: (callPeer || '') + ' declined the call',
-        busy:     (callPeer || '') + ' is busy',
+        declined: senderName + ' declined the call',
+        busy:     senderName + ' is busy',
         timeout:  'Missed call',
         hangup:   'Call ended',
         'mic-denied': 'Could not access microphone'
