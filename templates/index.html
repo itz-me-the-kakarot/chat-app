@@ -2220,6 +2220,7 @@ async function loadStoriesBar() {
 function openStoryViewer(uIdx) {
   svUserIdx = uIdx; svStoryIdx = 0;
   document.getElementById('storyViewer').classList.add('show');
+  document.getElementById('bottomNavPill').classList.add('hidden');
   renderStoryProgress();
   showStory();
 }
@@ -2366,6 +2367,7 @@ document.getElementById('svMediaWrap').addEventListener('touchend', e => {
 function closeStoryViewer() {
   clearTimeout(svTimer);
   document.getElementById('storyViewer').classList.remove('show');
+  document.getElementById('bottomNavPill').classList.remove('hidden');
   loadStoriesBar();
 }
 function likeCurrentStory() {
