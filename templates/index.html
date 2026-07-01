@@ -2124,7 +2124,7 @@ initKeys().then(async () => {
       <button class="story-icon-btn" id="svLikeBtn" onclick="likeCurrentStory()">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
 </button>
-      <button class="story-icon-btn" onclick="sendStoryReply()">
+      <button class="story-icon-btn" id="svSendBtn" onclick="sendStoryReply()">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
       </button>
     </div>
@@ -2235,8 +2235,24 @@ function showStory() {
   const s = g.stories[svStoryIdx];
   document.getElementById('svAvatar').innerHTML = g.avatar_url ? `<img src="${g.avatar_url}"/>` : (g.display_name||g.user_id)[0].toUpperCase();
   document.getElementById('svName').textContent = g.display_name;
-  document.getElementById('svLikeBtn').classList.remove('liked');
-  document.querySelector('.story-reply-pill').style.display = g.is_me ? 'none' : 'flex';
+  const isMe = g.is_me;
+  const replyInput = document.getElementById('svReplyInput');
+  const likeBtn = document.getElementById('svLikeBtn');
+  const sendBtn = document.getElementById('svSendBtn');
+  
+  likeBtn.classList.remove('liked');
+  if (isMe) {
+    replyInput.disabled = true;
+    replyInput.placeholder = "Your story";
+    replyInput.value = "";
+    likeBtn.style.display = 'none';
+    sendBtn.style.display = 'none';
+  } else {
+    replyInput.disabled = false;
+    replyInput.placeholder = "Reply to story...";
+    likeBtn.style.display = 'flex';
+    sendBtn.style.display = 'flex';
+  }
   const wrap = document.getElementById('svMediaWrap');
   wrap.innerHTML = s.media_type === 'video'
     ? `<video src="${s.media_url}" autoplay muted></video>`
