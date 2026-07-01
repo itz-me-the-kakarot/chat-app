@@ -559,6 +559,128 @@
     .gif-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; overflow-y:auto; max-height:300px; margin-top:10px; }
     .gif-grid img { width:100%; border-radius:8px; cursor:pointer; }
     
+
+    /* ── Call Modal ──────────────────────────────────────────── */
+    @keyframes callPulse {
+      0%   { transform: scale(1);   opacity: 0.7; }
+      100% { transform: scale(2.2); opacity: 0; }
+    }
+    @keyframes callFadeIn {
+      from { opacity: 0; transform: scale(0.92); }
+      to   { opacity: 1; transform: scale(1); }
+    }
+    .call-modal-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(5, 8, 22, 0.75);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      justify-content: center; align-items: center;
+      z-index: 9000;
+    }
+    .call-modal-card {
+      background: rgba(14, 18, 38, 0.94);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 28px;
+      padding: 40px 32px 32px;
+      min-width: 290px; max-width: 360px; width: 90%;
+      color: #fff;
+      display: flex; flex-direction: column; align-items: center; gap: 14px;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.04);
+      animation: callFadeIn 0.25s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    /* Pulsing avatar ring */
+    .call-avatar-ring {
+      position: relative;
+      width: 90px; height: 90px;
+      display: flex; align-items: center; justify-content: center;
+      margin-bottom: 4px;
+    }
+    .call-pulse {
+      position: absolute; inset: 0;
+      border-radius: 50%;
+      background: var(--accent, #a78bfa);
+      opacity: 0;
+    }
+    /* Ringing state: animate pulses */
+    .call-ringing .call-pulse-1 { animation: callPulse 1.8s ease-out 0s   infinite; }
+    .call-ringing .call-pulse-2 { animation: callPulse 1.8s ease-out 0.6s infinite; }
+    .call-ringing .call-pulse-3 { animation: callPulse 1.8s ease-out 1.2s infinite; }
+    .call-avatar-circle {
+      width: 72px; height: 72px;
+      border-radius: 50%;
+      background: var(--accent, #a78bfa);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 30px;
+      font-family: 'Space Grotesk', sans-serif;
+      font-weight: 700;
+      color: #fff;
+      position: relative; z-index: 1;
+      box-shadow: 0 0 0 3px rgba(255,255,255,0.15);
+    }
+    .call-status {
+      font-size: 1.05em;
+      font-weight: 600;
+      font-family: 'Space Grotesk', sans-serif;
+      text-align: center;
+      color: #fff;
+      line-height: 1.4;
+    }
+    .call-timer {
+      font-size: 0.85em;
+      opacity: 0.55;
+      display: none;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.05em;
+    }
+    .call-btn-row {
+      display: flex; gap: 24px; margin-top: 8px;
+      align-items: flex-start; justify-content: center;
+    }
+    .call-btn-wrap {
+      display: flex; flex-direction: column;
+      align-items: center; gap: 8px;
+    }
+    .call-btn {
+      width: 60px; height: 60px;
+      border-radius: 50%;
+      border: none;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px;
+      cursor: pointer;
+      transition: transform 0.15s, box-shadow 0.15s;
+    }
+    .call-btn:active { transform: scale(0.93); }
+    .call-btn-accept {
+      background: linear-gradient(135deg, #22c55e, #16a34a);
+      color: #fff;
+      box-shadow: 0 4px 20px rgba(34,197,94,0.45);
+    }
+    .call-btn-accept:hover { box-shadow: 0 6px 28px rgba(34,197,94,0.6); }
+    .call-btn-decline {
+      background: linear-gradient(135deg, #ef4444, #b91c1c);
+      color: #fff;
+      box-shadow: 0 4px 20px rgba(239,68,68,0.45);
+    }
+    .call-btn-decline:hover { box-shadow: 0 6px 28px rgba(239,68,68,0.6); }
+    .call-btn-mute {
+      background: rgba(255,255,255,0.12);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.18);
+    }
+    .call-btn-mute.muted {
+      background: var(--accent, #a78bfa);
+      box-shadow: 0 4px 20px var(--accent-glow, rgba(167,139,250,0.4));
+    }
+    .call-btn-label {
+      font-size: 11px;
+      color: rgba(255,255,255,0.55);
+      font-family: 'Inter', sans-serif;
+      font-weight: 500;
+    }
+
     #avatarInput, #chatWallInput, #fileInput { display:none; }
   </style>
 </head>
@@ -2673,5 +2795,55 @@ async function toggleViewersPanel() {
 }
 
 </script>
+
+<!-- ── Voice Call Modal ── -->
+<div id="callModal" class="call-modal-overlay">
+  <div class="call-modal-card">
+
+    <!-- Pulsing avatar ring (shown while ringing) -->
+    <div class="call-avatar-ring" id="callAvatarRing">
+      <div class="call-pulse call-pulse-1"></div>
+      <div class="call-pulse call-pulse-2"></div>
+      <div class="call-pulse call-pulse-3"></div>
+      <div class="call-avatar-circle" id="callAvatarCircle">📞</div>
+    </div>
+
+    <div id="callStatus" class="call-status">Calling…</div>
+    <div id="callTimer" class="call-timer">00:00</div>
+
+    <audio id="remoteAudio" autoplay style="display:none;"></audio>
+
+    <div class="call-btn-row">
+      <div class="call-btn-wrap" id="acceptWrap" style="display:none">
+        <button id="acceptBtn"  onclick="window._callAccept()"  class="call-btn call-btn-accept">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+        </button>
+        <span class="call-btn-label">Accept</span>
+      </div>
+
+      <div class="call-btn-wrap" id="declineWrap" style="display:none">
+        <button id="declineBtn" onclick="window._callDecline()" class="call-btn call-btn-decline">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style="transform:rotate(135deg)"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+        </button>
+        <span class="call-btn-label">Decline</span>
+      </div>
+
+      <div class="call-btn-wrap" id="muteWrap" style="display:none">
+        <button id="muteBtn"    onclick="window._callMute()"    class="call-btn call-btn-mute">🎙️</button>
+        <span class="call-btn-label" id="muteBtnLabel">Mute</span>
+      </div>
+
+      <div class="call-btn-wrap" id="hangupWrap" style="display:none">
+        <button id="hangupBtn"  onclick="window._callHangup()" class="call-btn call-btn-decline">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style="transform:rotate(135deg)"><path d="M6.62 10.79c1.44 2.83 3.76 5.14 6.59 6.59l2.2-2.2c.27-.27.67-.36 1.02-.24 1.12.37 2.33.57 3.57.57.55 0 1 .45 1 1V20c0 .55-.45 1-1 1-9.39 0-17-7.61-17-17 0-.55.45-1 1-1h3.5c.55 0 1 .45 1 1 0 1.25.2 2.45.57 3.57.11.35.03.74-.25 1.02l-2.2 2.2z"/></svg>
+        </button>
+        <span class="call-btn-label">End</span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="/static/js/call.js"></script>
 </body>
 </html>
