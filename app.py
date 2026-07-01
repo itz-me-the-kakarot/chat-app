@@ -22,6 +22,10 @@ RATE_LIMIT = 10
 BLOCK_TIME = 10
 DATABASE_URL = os.environ.get('DATABASE_URL')
 
+VALID_THEMES = {'violet', 'red', 'pink', 'green'}
+VALID_MODES = {'light', 'dark'}
+VALID_GLOW = {'off', 'mild', 'strong'}
+
 def get_db():
     conn = psycopg2.connect(DATABASE_URL)
     conn.autocommit = False
@@ -75,7 +79,7 @@ def init_db():
     cur.execute('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS theme_color TEXT')
     cur.execute('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS pinned_msg_id INTEGER')
     cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS story_ref JSONB')
-    
+
     # v6 features
     cur.execute('''CREATE TABLE IF NOT EXISTS groups (
         id SERIAL PRIMARY KEY,
@@ -110,7 +114,12 @@ def init_db():
         viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (story_id, viewer_id)
     )''')
-    
+
+    # v8: Global per-user theme settings
+    cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS theme TEXT DEFAULT 'violet'")
+    cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_mode TEXT DEFAULT 'dark'")
+    cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS glow_intensity TEXT DEFAULT 'mild'")
+
     conn.commit()
     cur.close()
     conn.close()
@@ -138,7 +147,40 @@ def are_friends(a, b):
 def get_chat_key(a, b):
     return tuple(sorted([a, b]))
 
+def get_user_theme(user_id):
+    """Fetch a user's theme prefs; falls back to sane defaults."""
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute('SELECT theme, theme_mode, glow_intensity FROM users WHERE user_id=%s', (user_id,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not row:
+        return {'theme': 'violet', 'theme_mode': 'dark', 'glow_intensity': 'mild'}
+    return {
+        'theme': row['theme'] or 'violet',
+        'theme_mode': row['theme_mode'] or 'dark',
+        'glow_intensity': row['glow_intensity'] or 'mild'
+    }
+
 init_db()
+
+@app.context_processor
+def inject_theme():
+    """Make theme available to every template, even logged-out ones (landing/login/signup)."""
+    if 'user_id' in session:
+        t = get_user_theme(session['user_id'])
+    else:
+        # Respect a theme/mode cookie set client-side for logged-out visitors, else default
+        t = {
+            'theme': request.cookies.get('chatly_theme', 'violet'),
+            'theme_mode': request.cookies.get('chatly_mode', 'dark'),
+            'glow_intensity': request.cookies.get('chatly_glow', 'mild')
+        }
+        if t['theme'] not in VALID_THEMES: t['theme'] = 'violet'
+        if t['theme_mode'] not in VALID_MODES: t['theme_mode'] = 'dark'
+        if t['glow_intensity'] not in VALID_GLOW: t['glow_intensity'] = 'mild'
+    return dict(theme=t['theme'], theme_mode=t['theme_mode'], glow_intensity=t['glow_intensity'])
 
 @app.route('/')
 def index():
@@ -181,11 +223,18 @@ def signup():
             error = 'ID must be 3-20 chars: letters, numbers, underscore only'
             return render_template('signup.html', error=error)
         hashed = generate_password_hash(password)
+        # Carry over any theme picked while logged out (from cookies) onto the new account
+        theme = request.cookies.get('chatly_theme', 'violet')
+        theme_mode = request.cookies.get('chatly_mode', 'dark')
+        glow = request.cookies.get('chatly_glow', 'mild')
+        if theme not in VALID_THEMES: theme = 'violet'
+        if theme_mode not in VALID_MODES: theme_mode = 'dark'
+        if glow not in VALID_GLOW: glow = 'mild'
         try:
             conn = get_db()
             cur = conn.cursor()
-            cur.execute('INSERT INTO users (user_id, display_name, password) VALUES (%s,%s,%s)',
-                        (user_id, display_name or None, hashed))
+            cur.execute('INSERT INTO users (user_id, display_name, password, theme, theme_mode, glow_intensity) VALUES (%s,%s,%s,%s,%s,%s)',
+                        (user_id, display_name or None, hashed, theme, theme_mode, glow))
             conn.commit()
             cur.close()
             conn.close()
@@ -242,7 +291,7 @@ def get_profile():
         return jsonify({})
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('SELECT user_id, display_name, avatar_url FROM users WHERE user_id=%s', (session['user_id'],))
+    cur.execute('SELECT user_id, display_name, avatar_url, theme, theme_mode, glow_intensity FROM users WHERE user_id=%s', (session['user_id'],))
     row = cur.fetchone()
     cur.close()
     conn.close()
@@ -273,6 +322,45 @@ def update_profile():
     cur.close()
     conn.close()
     return jsonify({'ok': True})
+
+@app.route('/update_theme', methods=['POST'])
+def update_theme():
+    """Global, per-user theme preference: color preset, light/dark mode, glow intensity."""
+    data = request.json or {}
+    theme = data.get('theme')
+    theme_mode = data.get('theme_mode')
+    glow = data.get('glow_intensity')
+
+    if theme is not None and theme not in VALID_THEMES:
+        return jsonify({'ok': False, 'error': 'invalid theme'})
+    if theme_mode is not None and theme_mode not in VALID_MODES:
+        return jsonify({'ok': False, 'error': 'invalid mode'})
+    if glow is not None and glow not in VALID_GLOW:
+        return jsonify({'ok': False, 'error': 'invalid glow'})
+
+    if 'user_id' in session:
+        conn = get_db()
+        cur = conn.cursor()
+        fields, vals = [], []
+        if theme is not None: fields.append('theme=%s'); vals.append(theme)
+        if theme_mode is not None: fields.append('theme_mode=%s'); vals.append(theme_mode)
+        if glow is not None: fields.append('glow_intensity=%s'); vals.append(glow)
+        if fields:
+            vals.append(session['user_id'])
+            cur.execute(f'UPDATE users SET {", ".join(fields)} WHERE user_id=%s', vals)
+            conn.commit()
+        cur.close()
+        conn.close()
+
+    resp = jsonify({'ok': True})
+    # Always set cookies too, so logged-out visitors (and the signup carry-over) keep it
+    if theme is not None:
+        resp.set_cookie('chatly_theme', theme, max_age=60*60*24*365)
+    if theme_mode is not None:
+        resp.set_cookie('chatly_mode', theme_mode, max_age=60*60*24*365)
+    if glow is not None:
+        resp.set_cookie('chatly_glow', glow, max_age=60*60*24*365)
+    return resp
 
 @app.route('/upload_avatar', methods=['POST'])
 def upload_avatar():
@@ -331,10 +419,10 @@ def pin_message(msg_id):
     if not msg or (msg['sender'] != me and msg['receiver'] != me):
         cur.close(); conn.close()
         return jsonify({'ok': False})
-    
+
     other = msg['receiver'] if msg['sender'] == me else msg['sender']
     u1, u2 = get_chat_key(me, other)
-    
+
     # Toggle pin
     cur.execute('SELECT pinned_msg_id FROM chat_settings WHERE user1=%s AND user2=%s', (u1, u2))
     row = cur.fetchone()
@@ -346,7 +434,7 @@ def pin_message(msg_id):
         (u1, u2, new_pin))
     conn.commit()
     cur.close(); conn.close()
-    
+
     payload = {'pinned_msg_id': new_pin, 'chat': other}
     if other in connected_users:
         socketio.emit('message_pinned', payload, to=connected_users[other])
@@ -529,13 +617,13 @@ def edit_message(msg_id):
     if not msg or msg['sender'] != me:
         cur.close(); conn.close()
         return jsonify({'ok': False})
-    
+
     cur.execute('UPDATE messages SET message=%s, sender_message=%s, edited=TRUE WHERE id=%s', (new_message, new_sender_message, msg_id))
     conn.commit()
     receiver = msg['receiver']
     is_group = msg['is_group']
     cur.close(); conn.close()
-    
+
     payload = {'id': msg_id, 'message': new_message, 'sender_message': new_sender_message, 'edited': True}
     if is_group:
         socketio.emit('message_edited', payload, to=receiver)
@@ -745,7 +833,7 @@ def delete_story(story_id):
     conn.commit()
     cur.close(); conn.close()
     return jsonify({'ok': True})
-    
+
 @app.route('/media/<uid>')
 def get_media(uid):
     if 'user_id' not in session:
@@ -796,7 +884,7 @@ def handle_private(data):
     poll_data = data.get('poll_data', None)
     file_metadata = data.get('file_metadata', None)
     story_ref = data.get('story_ref', None)
-    
+
     link_preview = None
     if msg_type == 'text':
         url_match = re.search(r'(https?://[^\s]+)', sender_message)
@@ -809,15 +897,15 @@ def handle_private(data):
                     title = soup.title.string if soup.title else url
                     og_title = soup.find('meta', property='og:title')
                     if og_title: title = og_title.get('content', title)
-                    
+
                     desc = ''
                     og_desc = soup.find('meta', property='og:description')
                     if og_desc: desc = og_desc.get('content', '')
-                    
+
                     image = ''
                     og_image = soup.find('meta', property='og:image')
                     if og_image: image = og_image.get('content', '')
-                    
+
                     link_preview = {'url': url, 'title': title[:100] if title else '', 'description': desc[:200] if desc else '', 'image': image if image else ''}
             except Exception:
                 pass
@@ -865,7 +953,7 @@ def handle_vote_poll(data):
     msg_id = data.get('msg_id')
     option_id = data.get('option_id')
     if not me or not msg_id or option_id is None: return
-    
+
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute('SELECT poll_data, sender, receiver FROM messages WHERE id=%s', (msg_id,))
@@ -873,7 +961,7 @@ def handle_vote_poll(data):
     if not msg or not msg['poll_data']:
         cur.close(); conn.close()
         return
-        
+
     poll_data = msg['poll_data']
     # user can only vote for one option, remove from others
     for opt in poll_data.get('options', []):
@@ -881,13 +969,13 @@ def handle_vote_poll(data):
             opt['votes'].remove(me)
         if opt['id'] == option_id:
             opt['votes'].append(me)
-            
+
     cur.execute('UPDATE messages SET poll_data=%s WHERE id=%s', (psycopg2.extras.Json(poll_data), msg_id))
     conn.commit()
-    
+
     other = msg['receiver'] if msg['sender'] == me else msg['sender']
     cur.close(); conn.close()
-    
+
     payload = {'msg_id': msg_id, 'poll_data': poll_data}
     if other in connected_users:
         socketio.emit('poll_updated', payload, to=connected_users[other])
