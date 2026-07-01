@@ -426,6 +426,43 @@
       box-shadow: 0 2px 8px var(--accent-glow);
     }
 
+    /* Custom Range Slider Styles */
+    input[type=range] {
+      -webkit-appearance: none;
+      width: 100%;
+      height: 6px;
+      border-radius: 3px;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      outline: none;
+      margin: 12px 0;
+    }
+    input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--accent);
+      border: 2px solid #fff;
+      box-shadow: 0 0 8px var(--accent-glow);
+      cursor: pointer;
+      transition: transform 0.1s ease;
+    }
+    input[type=range]::-webkit-slider-thumb:active {
+      transform: scale(1.25);
+    }
+
+    .pill-option:hover {
+      color: var(--text-primary);
+    }
+    .pill-option.active {
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+      box-shadow: 0 2px 8px var(--accent-glow);
+    }
+
     /* Profile screen */
     #profileScreen { background:var(--bg-primary); overflow-y:auto; padding-bottom: calc(var(--nav-height) + 30px); }
     .profile-av-wrap { display:flex; justify-content:center; margin-top:24px; position:relative; z-index:1; flex-shrink:0; }
@@ -698,13 +735,11 @@
     </div>
 
     <div style="margin-bottom: 16px;">
-      <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 6px;">Accent Glow</h4>
-      <div class="pill-selector" id="glowStrengthPillSelector">
-        <div class="pill-option" data-value="none" onclick="setAppThemeGlow('none')">None</div>
-        <div class="pill-option" data-value="mild" onclick="setAppThemeGlow('mild')">Mild</div>
-        <div class="pill-option" data-value="normal" onclick="setAppThemeGlow('normal')">Normal</div>
-        <div class="pill-option" data-value="strong" onclick="setAppThemeGlow('strong')">Strong</div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 6px;">
+        <h4 style="font-size: 13px; color: var(--text-secondary); margin:0;">Accent Glow</h4>
+        <span id="glowValText" style="font-size: 12px; color: var(--accent); font-weight:600;">Normal</span>
       </div>
+      <input type="range" id="glowSlider" min="0" max="2" step="0.1" oninput="setAppThemeGlowSlider(this.value)" style="width:100%; accent-color: var(--accent); cursor: pointer;"/>
     </div>
   </div>
   <div class="psection">
@@ -887,18 +922,25 @@ function setAppThemeColor(color) {
   setAppThemeMode(currentMode);
 }
 
-function setAppThemeGlow(strength) {
-  localStorage.setItem('chatly_theme_glow', strength);
-  document.body.classList.remove('glow-none', 'glow-mild', 'glow-normal', 'glow-strong');
-  document.body.classList.add('glow-' + strength);
+function setAppThemeGlowSlider(val) {
+  localStorage.setItem('chatly_theme_glow_val', val);
+  document.documentElement.style.setProperty('--glow-strength', val);
   
-  // Highlight active option in pill selector
-  document.querySelectorAll('#glowStrengthPillSelector .pill-option').forEach(el => {
-    el.classList.remove('active');
-    if (el.getAttribute('data-value') === strength) {
-      el.classList.add('active');
-    }
-  });
+  if (parseFloat(val) === 0) {
+    document.body.classList.add('glow-none');
+  } else {
+    document.body.classList.remove('glow-none');
+  }
+  
+  const label = document.getElementById('glowValText');
+  if (label) {
+    const v = parseFloat(val);
+    if (v === 0) label.textContent = 'Off';
+    else if (v <= 0.5) label.textContent = 'Mild';
+    else if (v <= 1.0) label.textContent = 'Normal';
+    else if (v <= 1.5) label.textContent = 'Strong';
+    else label.textContent = 'Super Glow';
+  }
 }
 
 function restoreGlobalTheme() {
@@ -911,11 +953,16 @@ function restoreGlobalTheme() {
 function initAppTheme() {
   const mode = localStorage.getItem('chatly_theme_mode') || 'dark';
   const color = localStorage.getItem('chatly_theme_color') || 'violet';
-  const glow = localStorage.getItem('chatly_theme_glow') || 'normal';
+  const glowVal = localStorage.getItem('chatly_theme_glow_val') || '1';
   
   setAppThemeMode(mode);
   setAppThemeColor(color);
-  setAppThemeGlow(glow);
+  
+  const slider = document.getElementById('glowSlider');
+  if (slider) {
+    slider.value = glowVal;
+  }
+  setAppThemeGlowSlider(glowVal);
 }
 
 // ── Screen management & Bottom Nav Switcher ───────────────────
