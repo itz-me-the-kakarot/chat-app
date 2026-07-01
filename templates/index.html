@@ -302,13 +302,29 @@
     
     /* Sharp neon glow on pill — dark mode, no animation */
     body:not(.mode-light) .bottom-nav-pill {
+      border-color: rgba(255, 255, 255, 0.12);
+      box-shadow: 0 10px 30px var(--glass-shadow);
+    }
+    body:not(.mode-light):not(.glow-none) .bottom-nav-pill {
       border-color: var(--accent);
       box-shadow:
-        0 0 0 1px var(--accent),
-        0 0 8px 1px var(--accent),
-        0 0 22px 4px var(--accent-glow),
-        0 0 50px 8px var(--accent-glow),
+        0 0 0 calc(1px * var(--glow-strength)) var(--accent),
+        0 0 calc(8px * var(--glow-strength)) var(--accent),
+        0 0 calc(22px * var(--glow-strength)) var(--accent-glow),
+        0 0 calc(50px * var(--glow-strength)) var(--accent-glow),
         0 10px 30px rgba(0,0,0,0.6);
+    }
+
+    /* Soft, elegant colored shadow glow in light mode */
+    body.mode-light .bottom-nav-pill {
+      border-color: var(--glass-border);
+      box-shadow: 0 10px 30px var(--glass-shadow);
+    }
+    body.mode-light:not(.glow-none) .bottom-nav-pill {
+      box-shadow:
+        0 0 calc(1.5px * var(--glow-strength)) var(--accent),
+        0 calc(4px * var(--glow-strength)) calc(16px * var(--glow-strength)) var(--accent-light),
+        0 10px 30px var(--glass-shadow);
     }
 
     /* Sharp neon on active tab icon — dark mode, no animation */
@@ -317,6 +333,11 @@
         drop-shadow(0 0 2px var(--accent))
         drop-shadow(0 0 6px var(--accent))
         drop-shadow(0 0 14px var(--accent-glow));
+      transform: translateY(-2px);
+    }
+    /* Flat clean style for active tab icon in light mode */
+    body.mode-light .bottom-nav-pill .tab.active .tab-icon {
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,0.08));
       transform: translateY(-2px);
     }
 
@@ -372,6 +393,37 @@
       right: 25%;
       margin: 0;
       border: 1.5px solid var(--bg-secondary);
+    }
+
+    /* Pill Segmented Control Styles */
+    .pill-selector {
+      display: flex;
+      background: var(--bg-secondary);
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      padding: 4px;
+      gap: 4px;
+      width: 100%;
+    }
+    .pill-option {
+      flex: 1;
+      text-align: center;
+      padding: 10px 0;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      color: var(--text-secondary);
+      transition: background 0.2s, color 0.2s, box-shadow 0.2s;
+    }
+    .pill-option:hover {
+      color: var(--text-primary);
+    }
+    .pill-option.active {
+      background: var(--accent);
+      color: #fff;
+      font-weight: 600;
+      box-shadow: 0 2px 8px var(--accent-glow);
     }
 
     /* Profile screen */
@@ -628,9 +680,9 @@
     
     <div style="margin-bottom: 16px;">
       <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 6px;">Appearance</h4>
-      <div style="display: flex; gap: 8px;">
-        <button class="pbtn" id="btnModeLight" onclick="setAppThemeMode('light')" style="margin: 0; flex: 1; text-align: center; justify-content: center; padding: 10px; font-weight: 600;">☀️ Light Mode</button>
-        <button class="pbtn" id="btnModeDark" onclick="setAppThemeMode('dark')" style="margin: 0; flex: 1; text-align: center; justify-content: center; padding: 10px; font-weight: 600;">🌙 Dark Mode</button>
+      <div class="pill-selector" id="appearanceModePill">
+        <div class="pill-option" id="btnModeLight" onclick="setAppThemeMode('light')">☀️ Light</div>
+        <div class="pill-option" id="btnModeDark" onclick="setAppThemeMode('dark')">🌙 Dark</div>
       </div>
     </div>
 
@@ -639,20 +691,20 @@
       <div class="theme-picker">
         <div class="theme-swatch" id="swatch-blue" style="background:#4f8ef7;" onclick="setAppThemeColor('blue')"></div>
         <div class="theme-swatch" id="swatch-violet" style="background:#a78bfa;" onclick="setAppThemeColor('violet')"></div>
-        <div class="theme-swatch" id="swatch-red" style="background:#ef4444;" onclick="setAppThemeColor('red')"></div>
-        <div class="theme-swatch" id="swatch-pink" style="background:#f43f5e;" onclick="setAppThemeColor('pink')"></div>
+        <div class="theme-swatch" id="swatch-red" style="background:#ff2200;" onclick="setAppThemeColor('red')"></div>
+        <div class="theme-swatch" id="swatch-pink" style="background:#ff007f;" onclick="setAppThemeColor('pink')"></div>
         <div class="theme-swatch" id="swatch-green" style="background:#22c55e;" onclick="setAppThemeColor('green')"></div>
       </div>
     </div>
 
     <div style="margin-bottom: 16px;">
-      <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 6px;">Dark Accent Glow</h4>
-      <select id="glowStrengthSelect" onchange="setAppThemeGlow(this.value)" style="width:100%;background:var(--bg-secondary);border:1px solid var(--border-color);border-radius:12px;padding:12px 14px;color:var(--text-primary);font-size:14px;outline:none;">
-        <option value="none">None (Flat)</option>
-        <option value="mild">Mild Glow</option>
-        <option value="normal">Normal Glow</option>
-        <option value="strong">Strong Glow</option>
-      </select>
+      <h4 style="font-size: 13px; color: var(--text-secondary); margin-bottom: 6px;">Accent Glow</h4>
+      <div class="pill-selector" id="glowStrengthPillSelector">
+        <div class="pill-option" data-value="none" onclick="setAppThemeGlow('none')">None</div>
+        <div class="pill-option" data-value="mild" onclick="setAppThemeGlow('mild')">Mild</div>
+        <div class="pill-option" data-value="normal" onclick="setAppThemeGlow('normal')">Normal</div>
+        <div class="pill-option" data-value="strong" onclick="setAppThemeGlow('strong')">Strong</div>
+      </div>
     </div>
   </div>
   <div class="psection">
@@ -809,18 +861,13 @@ const socket = io({ autoConnect: false });
 // ── Themes and Glow System ────────────────────────────────────
 function setAppThemeMode(mode) {
   localStorage.setItem('chatly_theme_mode', mode);
+  document.querySelectorAll('#appearanceModePill .pill-option').forEach(el => el.classList.remove('active'));
   if (mode === 'light') {
     document.body.classList.add('mode-light');
-    document.getElementById('btnModeLight').style.background = 'var(--accent)';
-    document.getElementById('btnModeLight').style.color = '#fff';
-    document.getElementById('btnModeDark').style.background = 'var(--bg-secondary)';
-    document.getElementById('btnModeDark').style.color = 'var(--text-primary)';
+    document.getElementById('btnModeLight').classList.add('active');
   } else {
     document.body.classList.remove('mode-light');
-    document.getElementById('btnModeDark').style.background = 'var(--accent)';
-    document.getElementById('btnModeDark').style.color = '#fff';
-    document.getElementById('btnModeLight').style.background = 'var(--bg-secondary)';
-    document.getElementById('btnModeLight').style.color = 'var(--text-primary)';
+    document.getElementById('btnModeDark').classList.add('active');
   }
 }
 
@@ -844,7 +891,14 @@ function setAppThemeGlow(strength) {
   localStorage.setItem('chatly_theme_glow', strength);
   document.body.classList.remove('glow-none', 'glow-mild', 'glow-normal', 'glow-strong');
   document.body.classList.add('glow-' + strength);
-  document.getElementById('glowStrengthSelect').value = strength;
+  
+  // Highlight active option in pill selector
+  document.querySelectorAll('#glowStrengthPillSelector .pill-option').forEach(el => {
+    el.classList.remove('active');
+    if (el.getAttribute('data-value') === strength) {
+      el.classList.add('active');
+    }
+  });
 }
 
 function restoreGlobalTheme() {
