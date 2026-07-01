@@ -17,6 +17,7 @@
   let timeoutHandle = null;
   let callActive    = false;
   let pendingOffer  = null;  // SDP offer stored while callee decides
+  let candidateQueue = [];
 
   const STUN_CFG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
@@ -111,6 +112,7 @@
     if (localStream) { localStream.getTracks().forEach(t => t.stop()); localStream = null; }
     const ra = remoteAudio(); if (ra) ra.srcObject = null;
     pendingOffer = null;
+    candidateQueue = [];
     callPeer = null; isCaller = false; muted = false; callActive = false;
     // Reset mute button state
     const mb = muteBtn();
@@ -203,6 +205,13 @@
 
     pc = buildPC();
     await pc.setRemoteDescription(new RTCSessionDescription(pendingOffer));
+    
+    // Process queued candidates
+    while (candidateQueue.length > 0) {
+      const candidate = candidateQueue.shift();
+      try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (_) {}
+    }
+
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
 
@@ -239,8 +248,8 @@
 
   /* ── Socket listeners ──────────────────────────────────── */
   // Socket is declared after this script in some page orderings,
-  // so we hook in once the page has fully loaded.
-  window.addEventListener('load', function attachCallSocketListeners () {
+  // so we hook in once the page has fully loaded or immediately if already loaded.
+  function attachCallSocketListeners () {
     if (typeof socket === 'undefined') {
       // Retry in case socket.io hasn't initialised yet
       setTimeout(attachCallSocketListeners, 300);
@@ -267,18 +276,29 @@
       }, 30000);
     });
 
-    /* Caller: callee answered */
+    /* Caller: answered */
     socket.on('call-accept', async (data) => {
       clearTimeout(timeoutHandle);
       if (!pc) return;
       await pc.setRemoteDescription(new RTCSessionDescription(data.sdp));
+      
+      // Process queued candidates
+      while (candidateQueue.length > 0) {
+        const candidate = candidateQueue.shift();
+        try { await pc.addIceCandidate(new RTCIceCandidate(candidate)); } catch (_) {}
+      }
+      
       showConnectedUI();
     });
 
     /* Both: ICE candidates */
     socket.on('call-signal', async (data) => {
-      if (data.candidate && pc) {
-        try { await pc.addIceCandidate(new RTCIceCandidate(data.candidate)); } catch (_) {}
+      if (data.candidate) {
+        if (pc && pc.remoteDescription && pc.remoteDescription.type) {
+          try { await pc.addIceCandidate(new RTCIceCandidate(data.candidate)); } catch (_) {}
+        } else {
+          candidateQueue.push(data.candidate);
+        }
       }
     });
 
@@ -296,6 +316,12 @@
       if (typeof showToast === 'function') showToast(msg);
       cleanup();
     });
-  });
+  }
+
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    attachCallSocketListeners();
+  } else {
+    window.addEventListener('load', attachCallSocketListeners);
+  }
 
 })();
