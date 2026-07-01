@@ -974,6 +974,7 @@ function openAvatarCrop(input) {
     const img = new Image();
     img.onload = () => {
       document.getElementById('cropModal').classList.add('show');
+      document.getElementById('bottomNavPill').classList.add('hidden');
       const vp = document.getElementById('cropViewport');
       const canvas = document.getElementById('cropCanvas');
       const frame = document.getElementById('cropFrame');
@@ -1040,6 +1041,7 @@ function setupCropGestures(vp) {
 
 function cancelCrop() {
   document.getElementById('cropModal').classList.remove('show');
+  document.getElementById('bottomNavPill').classList.remove('hidden');
   cropState = null;
 }
 
@@ -2209,6 +2211,8 @@ async function uploadStory(input) {
 
 function confirmStoryPost(previewUrl, isVideo) {
   return new Promise(resolve => {
+    const navPill = document.getElementById('bottomNavPill');
+    navPill.classList.add('hidden');
     const modal = document.createElement('div');
     modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.9);z-index:700;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;';
     modal.innerHTML = `
@@ -2221,8 +2225,8 @@ function confirmStoryPost(previewUrl, isVideo) {
         <button id="storyShareBtn" style="padding:10px 24px;border-radius:10px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer;">Share</button>
       </div>`;
     document.body.appendChild(modal);
-    modal.querySelector('#storyCancelBtn').onclick = () => { modal.remove(); resolve(false); };
-    modal.querySelector('#storyShareBtn').onclick = () => { modal.remove(); resolve(true); };
+    modal.querySelector('#storyCancelBtn').onclick = () => { modal.remove(); navPill.classList.remove('hidden'); resolve(false); };
+    modal.querySelector('#storyShareBtn').onclick = () => { modal.remove(); navPill.classList.remove('hidden'); resolve(true); };
   });
 }
 async function loadStoriesBar() {
