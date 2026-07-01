@@ -400,9 +400,9 @@
     /* Chat settings */
     #chatSettingsScreen { background:var(--bg-primary); overflow-y:auto; }
     .theme-picker { display:flex; gap:10px; margin-top:8px; flex-wrap:wrap; }
-    /* ── Sliding glassy glider (light mode only) ── */
+    /* ── Sliding glassy glider ── */
     #navGlider {
-      display: none;
+      display: block;
       position: absolute;
       top: 50%;
       transform: translateY(-50%);
@@ -420,8 +420,14 @@
       pointer-events: none;
       z-index: 0;
     }
-    /* Only show in light mode */
-    body.mode-light #navGlider { display: block; }
+    /* Dark mode override for the glider */
+    body:not(.mode-light) #navGlider {
+      background: rgba(255, 255, 255, 0.12);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      box-shadow:
+        0 4px 15px rgba(0, 0, 0, 0.4),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    }
     /* Tabs sit above glider */
     .bottom-nav-pill .tab { z-index: 1; }
 
