@@ -114,6 +114,7 @@ def init_db():
         viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (story_id, viewer_id)
     )''')
+    cur.execute('ALTER TABLE story_views ADD COLUMN IF NOT EXISTS liked BOOLEAN DEFAULT FALSE')
 
     # v8: Global per-user theme settings
     cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS theme TEXT DEFAULT 'violet'")
@@ -713,6 +714,13 @@ def like_story(story_id):
     if not story: return jsonify({'ok': False})
     if story['user_id'] != me and not are_friends(me, story['user_id']):
         return jsonify({'ok': False, 'error': 'not a friend'})
+    
+    conn = get_db(); cur = conn.cursor()
+    cur.execute('''INSERT INTO story_views (story_id, viewer_id, liked) VALUES (%s,%s,TRUE)
+        ON CONFLICT (story_id, viewer_id) DO UPDATE SET liked = TRUE''', (story_id, me))
+    conn.commit()
+    cur.close(); conn.close()
+    
     if story['user_id'] in connected_users:
         socketio.emit('story_liked', {'story_id': story_id, 'by': me}, to=connected_users[story['user_id']])
     return jsonify({'ok': True})
@@ -809,13 +817,13 @@ def story_viewers(story_id):
     if not story or story['user_id'] != me:
         cur.close(); conn.close()
         return jsonify([])
-    cur.execute('''SELECT v.viewer_id, v.viewed_at, u.display_name, u.avatar_url
+    cur.execute('''SELECT v.viewer_id, v.viewed_at, v.liked, u.display_name, u.avatar_url
         FROM story_views v JOIN users u ON u.user_id = v.viewer_id
-        WHERE v.story_id=%s ORDER BY v.viewed_at DESC''', (story_id,))
+        WHERE v.story_id=%s ORDER BY v.liked DESC, v.viewed_at DESC''', (story_id,))
     rows = cur.fetchall()
     cur.close(); conn.close()
     return jsonify([{'user_id': r['viewer_id'], 'display_name': r['display_name'] or r['viewer_id'],
-        'avatar_url': r['avatar_url'], 'viewed_at': str(r['viewed_at'])} for r in rows])
+        'avatar_url': r['avatar_url'], 'viewed_at': str(r['viewed_at']), 'liked': r['liked']} for r in rows])
 
 @app.route('/story/<int:story_id>', methods=['DELETE'])
 def delete_story(story_id):
