@@ -47,16 +47,16 @@
       --accent-glow: rgba(167, 139, 250, 0.35);
     }
     .theme-red {
-      --accent: #ef4444;
-      --accent-dark: #dc2626;
-      --accent-light: rgba(239, 68, 68, 0.12);
-      --accent-glow: rgba(239, 68, 68, 0.35);
+      --accent: #ff2200;
+      --accent-dark: #cc1a00;
+      --accent-light: rgba(255, 34, 0, 0.12);
+      --accent-glow: rgba(255, 34, 0, 0.5);
     }
     .theme-pink {
-      --accent: #f43f5e;
-      --accent-dark: #e11d48;
-      --accent-light: rgba(244, 63, 94, 0.12);
-      --accent-glow: rgba(244, 63, 94, 0.35);
+      --accent: #ff007f;
+      --accent-dark: #cc0066;
+      --accent-light: rgba(255, 0, 127, 0.12);
+      --accent-glow: rgba(255, 0, 127, 0.5);
     }
     .theme-green {
       --accent: #22c55e;
@@ -300,74 +300,24 @@
       isolation: isolate;
     }
     
-    /* Glowing pill (Dark mode) — animated layers */
+    /* Sharp neon glow on pill — dark mode, no animation */
     body:not(.mode-light) .bottom-nav-pill {
+      border-color: var(--accent);
       box-shadow:
-        0 0 calc(18px * var(--glow-strength)) var(--accent-glow),
-        0 0 calc(40px * var(--glow-strength)) var(--accent-glow),
-        0 10px 30px rgba(0,0,0,0.5);
-      border-color: rgba(255, 255, 255, 0.12);
-      animation: pillGlowPulse 3s ease-in-out infinite;
+        0 0 0 1px var(--accent),
+        0 0 8px 1px var(--accent),
+        0 0 22px 4px var(--accent-glow),
+        0 0 50px 8px var(--accent-glow),
+        0 10px 30px rgba(0,0,0,0.6);
     }
 
-    @keyframes pillGlowPulse {
-      0%, 100% {
-        box-shadow:
-          0 0 calc(14px * var(--glow-strength)) var(--accent-glow),
-          0 0 calc(32px * var(--glow-strength)) var(--accent-glow),
-          0 10px 30px rgba(0,0,0,0.5);
-      }
-      50% {
-        box-shadow:
-          0 0 calc(28px * var(--glow-strength)) var(--accent-glow),
-          0 0 calc(60px * var(--glow-strength)) var(--accent-glow),
-          0 0 calc(90px * var(--glow-strength)) var(--accent-glow),
-          0 10px 30px rgba(0,0,0,0.5);
-      }
-    }
-
-    /* Aurora shimmer border — conic gradient rotates around the pill */
-    body:not(.mode-light) .bottom-nav-pill::before {
-      content: '';
-      position: absolute;
-      inset: -1.5px;
-      border-radius: 34px;
-      background: conic-gradient(
-        from var(--aurora-angle, 0deg),
-        transparent 0%,
-        var(--accent) 15%,
-        rgba(255,255,255,0.6) 25%,
-        var(--accent) 35%,
-        transparent 50%,
-        transparent 100%
-      );
-      z-index: -1;
-      opacity: calc(0.55 * var(--glow-strength));
-      animation: auroraRotate 4s linear infinite;
-    }
-    @property --aurora-angle {
-      syntax: '<angle>';
-      initial-value: 0deg;
-      inherits: false;
-    }
-    @keyframes auroraRotate {
-      to { --aurora-angle: 360deg; }
-    }
-
-    /* Soft inner ambient glow layer */
-    body:not(.mode-light) .bottom-nav-pill::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      border-radius: 32px;
-      background: radial-gradient(ellipse at 50% 110%, var(--accent-glow) 0%, transparent 70%);
-      opacity: calc(0.7 * var(--glow-strength));
-      animation: innerGlowPulse 3s ease-in-out infinite;
-      pointer-events: none;
-    }
-    @keyframes innerGlowPulse {
-      0%, 100% { opacity: calc(0.4 * var(--glow-strength)); transform: scaleX(0.9); }
-      50%       { opacity: calc(0.9 * var(--glow-strength)); transform: scaleX(1.05); }
+    /* Sharp neon on active tab icon — dark mode, no animation */
+    body:not(.mode-light) .bottom-nav-pill .tab.active .tab-icon {
+      filter:
+        drop-shadow(0 0 2px var(--accent))
+        drop-shadow(0 0 6px var(--accent))
+        drop-shadow(0 0 14px var(--accent-glow));
+      transform: translateY(-2px);
     }
 
     .bottom-nav-pill.hidden {
@@ -406,28 +356,6 @@
 
     .bottom-nav-pill .tab.active {
       color: var(--accent);
-    }
-    
-    /* Accent glow on active tab (Dark Mode only) — animated burst */
-    body:not(.mode-light) .bottom-nav-pill .tab.active .tab-icon {
-      filter:
-        drop-shadow(0 0 calc(4px * var(--glow-strength)) var(--accent))
-        drop-shadow(0 0 calc(10px * var(--glow-strength)) var(--accent));
-      transform: translateY(-2px);
-      animation: tabIconGlow 2.5s ease-in-out infinite;
-    }
-    @keyframes tabIconGlow {
-      0%, 100% {
-        filter:
-          drop-shadow(0 0 calc(3px * var(--glow-strength)) var(--accent))
-          drop-shadow(0 0 calc(8px * var(--glow-strength)) var(--accent));
-      }
-      50% {
-        filter:
-          drop-shadow(0 0 calc(6px * var(--glow-strength)) var(--accent))
-          drop-shadow(0 0 calc(18px * var(--glow-strength)) var(--accent))
-          drop-shadow(0 0 calc(28px * var(--glow-strength)) var(--accent-glow));
-      }
     }
 
     .bottom-nav-pill .tab .av-sm {
@@ -2163,8 +2091,8 @@ initKeys().then(async () => {
 <style>
 .story-bar{display:flex;gap:14px;overflow-x:auto;padding:10px 12px;border-bottom:1px solid #1e2a45;flex-shrink:0;}
 .story-item{display:flex;flex-direction:column;align-items:center;gap:4px;cursor:pointer;flex-shrink:0;width:60px;}
-.story-ring{width:54px;height:54px;border-radius:50%;padding:2px;background:linear-gradient(45deg,#f59e0b,#ef4444,#a78bfa);display:flex;align-items:center;justify-content:center;}
-.story-ring.viewed{background:#3a4258;}
+.story-ring{width:54px;height:54px;border-radius:50%;padding:3px;background:linear-gradient(45deg,#ff6a00,#ff9500);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 1.5px #ff7700,0 0 10px 3px rgba(255,120,0,0.7),0 0 22px 6px rgba(255,90,0,0.4);}
+.story-ring.viewed{background:#3a4258;box-shadow:none;}
 .story-ring .av{width:100%;height:100%;border:2px solid #0a0f1e;}
 .story-item span{font-size:11px;color:#a0aec0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60px;}
 .story-viewer{display:none;position:fixed;inset:0;background:#000;z-index:600;flex-direction:column;overflow:hidden;}
