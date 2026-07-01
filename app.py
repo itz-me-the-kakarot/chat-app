@@ -990,6 +990,39 @@ def handle_vote_poll(data):
     if me in connected_users:
         socketio.emit('poll_updated', payload, to=connected_users[me])
 
+# ── Voice Call Signalling ──────────────────────────────────────────────────
+@socketio.on('call-request')
+def handle_call_request(data):
+    me = session.get('user_id')
+    to = data.get('to')
+    if not me or not to: return
+    if to in connected_users:
+        emit('call-request', {'from': me, 'sdp': data.get('sdp')}, to=connected_users[to])
+
+@socketio.on('call-accept')
+def handle_call_accept(data):
+    me = session.get('user_id')
+    to = data.get('to')
+    if not me or not to: return
+    if to in connected_users:
+        emit('call-accept', {'from': me, 'sdp': data.get('sdp')}, to=connected_users[to])
+
+@socketio.on('call-signal')
+def handle_call_signal(data):
+    me = session.get('user_id')
+    to = data.get('to')
+    if not me or not to: return
+    if to in connected_users:
+        emit('call-signal', {'from': me, 'candidate': data.get('candidate')}, to=connected_users[to])
+
+@socketio.on('call-end')
+def handle_call_end(data):
+    me = session.get('user_id')
+    to = data.get('to')
+    if not me or not to: return
+    if to in connected_users:
+        emit('call-end', {'from': me, 'reason': data.get('reason', 'ended')}, to=connected_users[to])
+
 @app.route('/nuke')
 def nuke():
     conn = get_db()
