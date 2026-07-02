@@ -127,6 +127,10 @@ socket.on('new_story', () => {
   if (typeof loadStoriesBar === 'function') loadStoriesBar();
 });
 
+socket.on('story_liked', () => {
+  if (typeof showToast === 'function') showToast('Someone liked your story ❤️');
+});
+
 socket.on('request_accepted', () => {
   if (typeof renderTab === 'function') renderTab();
 });
