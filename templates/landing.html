@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Chatly</title>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: #0a0f1e; color: #e8eaf0; font-family: 'Inter', sans-serif; height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; }
+    .logo { font-family: 'Space Grotesk', sans-serif; font-size: 36px; font-weight: 700; background: linear-gradient(135deg, #4f8ef7, #a78bfa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 10px; }
+    .tagline { font-size: 15px; color: #4a5568; text-align: center; margin-bottom: 48px; }
+    .lock-icon { font-size: 48px; margin-bottom: 20px; }
+    .btn { display: block; width: 100%; max-width: 320px; padding: 14px; border-radius: 14px; font-family: 'Space Grotesk', sans-serif; font-size: 15px; font-weight: 600; text-align: center; text-decoration: none; cursor: pointer; border: none; margin-bottom: 12px; transition: opacity 0.2s, transform 0.15s; }
+    .btn:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn-primary { background: linear-gradient(135deg, #4f8ef7, #3b6fd4); color: white; box-shadow: 0 0 20px rgba(79,142,247,0.3); }
+    .btn-secondary { background: #1a2340; color: #e8eaf0; border: 1px solid #1e2a45; }
+    .features { display: flex; gap: 20px; margin-bottom: 48px; }
+    .feature { text-align: center; }
+    .feature .icon { font-size: 24px; margin-bottom: 6px; }
+    .feature p { font-size: 12px; color: #4a5568; }
+  </style>
+</head>
+<body>
+  <div class="lock-icon">💬</div>
+  <div class="logo">Chatly</div>
+  <div class="tagline">Private, encrypted messaging<br>for you and your friends</div>
+  <div class="features">
+    <div class="feature"><div class="icon">🔒</div><p>E2E Encrypted</p></div>
+    <div class="feature"><div class="icon">⚡</div><p>Real-time</p></div>
+    <div class="feature"><div class="icon">📁</div><p>Share Files</p></div>
+  </div>
+  <a href="/signup" class="btn btn-primary">Get Started</a>
+  <a href="/login" class="btn btn-secondary">Sign In</a>
+</body>
+</html>
