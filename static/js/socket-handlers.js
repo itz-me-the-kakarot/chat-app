@@ -123,6 +123,10 @@ socket.on('friend_request', () => {
   if (reqTab) reqTab.innerHTML = `Requests<span class="ndot"></span>`;
 });
 
+socket.on('new_story', () => {
+  if (typeof loadStoriesBar === 'function') loadStoriesBar();
+});
+
 socket.on('request_accepted', () => {
   if (typeof renderTab === 'function') renderTab();
 });
