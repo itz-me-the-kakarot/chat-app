@@ -776,15 +776,16 @@
       <input type="file" id="galleryInput" accept="image/*,video/*" onchange="sendFile(this)"/>
       <input type="file" id="fileInput" accept="*/*" onchange="sendFile(this)"/>
 
-      <!-- Text input wrapper -->
-      <div style="flex:1; display:flex; align-items:center; background:#1a2340; border:1px solid #1e2a45; border-radius:24px; padding:0 12px; transition:border-color 0.2s; min-width:0;" id="inputWrap">
-      <div id="knockModeBanner" style="display:none;background:linear-gradient(135deg,rgba(167,139,250,0.2),rgba(167,139,250,0.1));border:1px solid rgba(167,139,250,0.5);border-radius:8px;padding:8px 12px;margin:4px 8px;font-size:13px;color:#a78bfa;display:none;align-items:center;justify-content:space-between;">
-        <span>🚪 Knock mode — type your hidden message</span>
-        <span onclick="cancelKnockMode()" style="cursor:pointer;font-size:16px;color:#a0aec0;">✕</span>
-      </div>
-         type="text" placeholder="Message..." autocomplete="off" style="flex:1; background:transparent; border:none; padding:11px 0; color:#e8eaf0; font-family:'Inter',sans-serif; font-size:14px; outline:none; min-width:0;"/>
+      <!-- Knock Mode Banner -->
+      <div id="knockModeBanner" style="display:none;background:linear-gradient(135deg,rgba(167,139,250,0.2),rgba(167,139,250,0.1));border:1px solid rgba(167,139,250,0.5);border-radius:8px;padding:8px 12px;margin:4px 8px;font-size:13px;color:#a78bfa;align-items:center;justify-content:space-between;">
+          <span>🚪 Knock mode — type your hidden message</span>
+         <span onclick="cancelKnockMode()" style="cursor:pointer;font-size:16px;color:#a0aec0;">✕</span>
       </div>
 
+<!-- Text input wrapper -->
+<div style="flex:1; display:flex; align-items:center; background:#1a2340; border:1px solid #1e2a45; border-radius:24px; padding:0 12px; transition:border-color 0.2s; min-width:0;" id="inputWrap">
+  <input id="msgInput" type="text" placeholder="Message..." autocomplete="off" style="flex:1; background:transparent; border:none; padding:11px 0; color:#e8eaf0; font-family:'Inter',sans-serif; font-size:14px; outline:none; min-width:0;"/>
+</div>
       <!-- Voice bar (replaces everything in recording mode) -->
       <div id="voiceBar">
         <button id="voiceTrash" onclick="cancelVoiceRec()" type="button" title="Delete">🗑️</button>
