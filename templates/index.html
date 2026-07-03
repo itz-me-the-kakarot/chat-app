@@ -830,6 +830,7 @@
       <div class="plus-menu" id="plusMenu" style="display:none; position:absolute; bottom:100%; right:10px; background:#1a2340; border:1px solid #1e2a45; border-radius:12px; padding:8px 0; margin-bottom:8px; box-shadow:0 4px 20px rgba(0,0,0,.4); z-index:100; min-width:140px; flex-direction:column;">
         <div class="plus-item" onclick="document.getElementById('fileInput').click(); togglePlusMenu();" style="padding:10px 16px;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:10px;">📄 File</div>
         <div class="plus-item" onclick="openPollModal(); togglePlusMenu();" style="padding:10px 16px;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:10px;">📊 Poll</div>
+        <div class="plus-item" onclick="sendKnock(); togglePlusMenu();" style="padding:10px 16px;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:10px;">🚪 Knock</div>
       </div>
     </div>
     <!-- Floating gesture hints during hold-to-record -->
@@ -1514,6 +1515,18 @@ async function openChat(username) {
   for (const m of msgs) await renderMsg(m, m.sender === me);
 
   socket.emit('seen', { sender: username });
+
+  // Load pending knocks
+fetch('/pending_knocks')
+  .then(r => r.json())
+  .then(knocks => {
+    knocks.forEach(k => {
+      if (!document.getElementById(`msg-knock-${k.id}`)) {
+        renderKnockCard(k);
+      }
+    });
+  });
+
   document.getElementById('msgInput').focus();
 }
 
@@ -1560,6 +1573,13 @@ async function renderMsg(m, isSent, prepend = false) {
         <div style="font-size:11px;color:#a0aec0;">${fSize}</div>
       </div>
       <a href="${m.media_url}" target="_blank" class="dload" style="margin-top:0;">⬇</a>
+    </div>`;
+  } else if (m.msg_type === 'knock' && !m.sender_message) {
+    const knockStatus = m.seen ? 'Knock sent ✓' : 'Knock';
+    html += `<div class="knock-card" style="background:linear-gradient(135deg,rgba(167,139,250,0.2),rgba(167,139,250,0.1));border:2px solid rgba(167,139,250,0.5);border-radius:12px;padding:16px;text-align:center;box-shadow:0 0 20px rgba(167,139,250,0.3);">
+      <div style="font-size:32px;margin-bottom:8px;">🚪</div>
+      <div style="color:#a78bfa;font-weight:600;margin-bottom:8px;">${knockStatus}</div>
+      ${!isSent && !m.seen ? `<button onclick="acknowledgeKnock(${m.id},'${m.sender}')" style="background:linear-gradient(135deg,#a78bfa,#7c3aed);color:#fff;border:none;padding:10px 16px;border-radius:8px;font-weight:600;cursor:pointer;margin-top:8px;">Open the door</button>` : ''}
     </div>`;
   } else if (m.msg_type === 'poll') {
     html += renderPoll(m);
@@ -2202,6 +2222,53 @@ function renderPoll(m) {
   });
   return html + `</div>`;
 }
+// ── Knock feature ───────────────────────────────────────────────
+function sendKnock() {
+  if (!currentChat) {
+    alert('Select a chat first');
+    return;
+  }
+  
+  socket.emit('send_knock', {
+    receiver: currentChat,
+    encrypted_message: '', // Will be set to encrypted content later
+    encryption_salt: ''
+  });
+  
+  // Show feedback
+  const msgInput = document.getElementById('msgInput');
+  msgInput.placeholder = 'Knock sent! Waiting...';
+  setTimeout(() => { msgInput.placeholder = 'Message...'; }, 2000);
+}
+
+function acknowledgeKnock(knockId, sender) {
+  socket.emit('acknowledge_knock', {
+    knock_id: knockId,
+    sender: sender
+  });
+  
+  // Visual feedback
+  const btn = event.target;
+  btn.innerHTML = 'Door opening...';
+  btn.disabled = true;
+}
+
+function renderKnockCard(knock) {
+  const ul = document.getElementById('messages');
+  const li = document.createElement('li');
+  li.id = `msg-knock-${knock.id}`;
+  li.setAttribute('data-knock-id', knock.id);
+  
+  const html = `<div class="msender">${knock.sender}</div>
+    <div class="knock-card" style="background:linear-gradient(135deg,rgba(167,139,250,0.2),rgba(167,139,250,0.1));border:2px solid rgba(167,139,250,0.5);border-radius:12px;padding:16px;text-align:center;box-shadow:0 0 20px rgba(167,139,250,0.3);">
+      <div style="font-size:32px;margin-bottom:8px;">🚪</div>
+      <div style="color:#a78bfa;font-weight:600;margin-bottom:8px;">Knock</div>
+      <button onclick="acknowledgeKnock(${knock.id},'${knock.sender}')" style="background:linear-gradient(135deg,#a78bfa,#7c3aed);color:#fff;border:none;padding:10px 16px;border-radius:8px;font-weight:600;cursor:pointer;margin-top:8px;">Open the door</button>
+    </div>`;
+  
+  li.innerHTML = html;
+  ul.appendChild(li);
+}
 
 // ── GIF (Giphy API) ───────────────────────────────────────────
 const GIPHY_API_KEY = 'GlVGYHk3VVVWVN155555555555555555'; // Use a public beta key or placeholder
@@ -2302,6 +2369,36 @@ socket.on('message_deleted', function(data) {
   if (li) {
     li.innerHTML = '<span class="deleted-text" style="color:#a0aec0;font-style:italic;font-size:13px">This message was deleted</span>';
   }
+});
+
+socket.on('knock_received', function(data) {
+  // Show notification without revealing receiver identity
+  console.log('🚪 Someone knocked!');
+  if ('Notification' in window && Notification.permission === 'granted') {
+    new Notification('🚪 New Knock', { body: 'Someone wants to chat with you' });
+  }
+});
+
+socket.on('knock_acknowledged', function(data) {
+  // Sender gets acknowledgement
+  const knockCard = document.querySelector(`[data-knock-id="${data.knock_id}"]`);
+  if (knockCard) {
+    knockCard.innerHTML = 'Knock sent ✓';
+    knockCard.style.opacity = '0.7';
+  }
+});
+
+socket.on('knock_animation_sync', function(data) {
+  // Door opening animation for both users
+  const li = document.querySelector(`li[data-knock-id="${data.knock_id}"]`);
+  if (li) {
+    li.style.animation = 'knockAnimation 0.6s ease-out';
+  }
+});
+
+socket.on('knock_message_revealed', function(data) {
+  // Show hidden message after door opens
+  console.log('🔓 Message revealed:', data.encrypted_message);
 });
 
 socket.on('message_edited', async function(data) {
