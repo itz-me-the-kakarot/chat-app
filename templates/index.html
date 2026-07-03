@@ -763,7 +763,13 @@
       <span id="replyText"></span>
       <button class="x" onclick="cancelReply()">×</button>
     </div>
-    <div class="input-row" id="inputRow">
+    <!-- Knock Mode Banner -->
+<div id="knockModeBanner" style="display:none;background:linear-gradient(135deg,rgba(167,139,250,0.2),rgba(167,139,250,0.1));border:1px solid rgba(167,139,250,0.5);border-radius:8px;padding:8px 12px;margin:4px 8px;font-size:13px;color:#a78bfa;align-items:center;justify-content:space-between;">
+  <span>🚪 Knock mode — type your hidden message</span>
+  <span onclick="cancelKnockMode()" style="cursor:pointer;font-size:16px;color:#a0aec0;">✕</span>
+</div>
+
+<div class="input-row" id="inputRow">
       <!-- Camera left extreme -->
       <button class="cam-btn" id="cameraBtn" onclick="document.getElementById('cameraInput').click()" title="Camera" style="margin-right:4px;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
