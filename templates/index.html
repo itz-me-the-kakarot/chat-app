@@ -778,7 +778,11 @@
 
       <!-- Text input wrapper -->
       <div style="flex:1; display:flex; align-items:center; background:#1a2340; border:1px solid #1e2a45; border-radius:24px; padding:0 12px; transition:border-color 0.2s; min-width:0;" id="inputWrap">
-        <input id="msgInput" type="text" placeholder="Message..." autocomplete="off" style="flex:1; background:transparent; border:none; padding:11px 0; color:#e8eaf0; font-family:'Inter',sans-serif; font-size:14px; outline:none; min-width:0;"/>
+      <div id="knockModeBanner" style="display:none;background:linear-gradient(135deg,rgba(167,139,250,0.2),rgba(167,139,250,0.1));border:1px solid rgba(167,139,250,0.5);border-radius:8px;padding:8px 12px;margin:4px 8px;font-size:13px;color:#a78bfa;display:none;align-items:center;justify-content:space-between;">
+        <span>🚪 Knock mode — type your hidden message</span>
+        <span onclick="cancelKnockMode()" style="cursor:pointer;font-size:16px;color:#a0aec0;">✕</span>
+      </div>
+         type="text" placeholder="Message..." autocomplete="off" style="flex:1; background:transparent; border:none; padding:11px 0; color:#e8eaf0; font-family:'Inter',sans-serif; font-size:14px; outline:none; min-width:0;"/>
       </div>
 
       <!-- Voice bar (replaces everything in recording mode) -->
@@ -830,7 +834,7 @@
       <div class="plus-menu" id="plusMenu" style="display:none; position:absolute; bottom:100%; right:10px; background:#1a2340; border:1px solid #1e2a45; border-radius:12px; padding:8px 0; margin-bottom:8px; box-shadow:0 4px 20px rgba(0,0,0,.4); z-index:100; min-width:140px; flex-direction:column;">
         <div class="plus-item" onclick="document.getElementById('fileInput').click(); togglePlusMenu();" style="padding:10px 16px;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:10px;">📄 File</div>
         <div class="plus-item" onclick="openPollModal(); togglePlusMenu();" style="padding:10px 16px;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:10px;">📊 Poll</div>
-        <div class="plus-item" onclick="sendKnock(); togglePlusMenu();" style="padding:10px 16px;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:10px;">🚪 Knock</div>
+        <div class="plus-item" onclick="activateKnockMode(); togglePlusMenu();" style="padding:10px 16px;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:10px;">🚪 Knock</div>
       </div>
     </div>
     <!-- Floating gesture hints during hold-to-record -->
@@ -1796,6 +1800,14 @@ function cancelReply() {
 
 // ── Send ──────────────────────────────────────────────────────
 async function sendMsg() {
+
+  if (knockModeActive) {
+  const msg = document.getElementById('msgInput').value.trim();
+  if (!msg) return;
+  sendKnock(msg);
+  document.getElementById('msgInput').value = '';
+  return;
+}
   const input = document.getElementById('msgInput');
   const msg = input.value.trim();
   if (!msg || !currentChat) return;
@@ -2223,29 +2235,39 @@ function renderPoll(m) {
   return html + `</div>`;
 }
 // ── Knock feature ───────────────────────────────────────────────
-function sendKnock() {
-  if (!currentChat) {
-    alert('Select a chat first');
-    return;
-  }
-  
+
+let knockModeActive = false;
+
+function activateKnockMode() {
+  knockModeActive = true;
+  const banner = document.getElementById('knockModeBanner');
+  banner.style.display = 'flex';
+  document.getElementById('msgInput').placeholder = 'Type your knock message...';
+  document.getElementById('msgInput').focus();
+}
+
+function cancelKnockMode() {
+  knockModeActive = false;
+  document.getElementById('knockModeBanner').style.display = 'none';
+  document.getElementById('msgInput').placeholder = 'Message...';
+}
+
+function sendKnock(message) {
+  if (!currentChat) return;
   socket.emit('send_knock', {
     receiver: currentChat,
-    encrypted_message: '', // Will be set to encrypted content later
+    encrypted_message: message,
     encryption_salt: ''
   });
-  
-  // Show feedback
-  const msgInput = document.getElementById('msgInput');
-  msgInput.placeholder = 'Knock sent! Waiting...';
-  setTimeout(() => { msgInput.placeholder = 'Message...'; }, 2000);
+  cancelKnockMode();
 }
 
 function acknowledgeKnock(knockId, sender) {
-  socket.emit('acknowledge_knock', {
-    knock_id: knockId,
-    sender: sender
-  });
+  socket.emit('acknowledge_knock', { knock_id: knockId, sender: sender });
+  const btn = event.target;
+  btn.innerHTML = 'Door opening...';
+  btn.disabled = true;
+}
   
   // Visual feedback
   const btn = event.target;
