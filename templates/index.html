@@ -763,13 +763,7 @@
       <span id="replyText"></span>
       <button class="x" onclick="cancelReply()">×</button>
     </div>
-    <!-- Knock Mode Banner -->
-<div id="knockModeBanner" style="display:none;background:linear-gradient(135deg,rgba(167,139,250,0.2),rgba(167,139,250,0.1));border:1px solid rgba(167,139,250,0.5);border-radius:8px;padding:8px 12px;margin:4px 8px;font-size:13px;color:#a78bfa;align-items:center;justify-content:space-between;">
-  <span>🚪 Knock mode — type your hidden message</span>
-  <span onclick="cancelKnockMode()" style="cursor:pointer;font-size:16px;color:#a0aec0;">✕</span>
-</div>
-
-<div class="input-row" id="inputRow">
+    <div class="input-row" id="inputRow">
       <!-- Camera left extreme -->
       <button class="cam-btn" id="cameraBtn" onclick="document.getElementById('cameraInput').click()" title="Camera" style="margin-right:4px;">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -782,16 +776,11 @@
       <input type="file" id="galleryInput" accept="image/*,video/*" onchange="sendFile(this)"/>
       <input type="file" id="fileInput" accept="*/*" onchange="sendFile(this)"/>
 
-      <!-- Knock Mode Banner -->
-      <div id="knockModeBanner" style="display:none;background:linear-gradient(135deg,rgba(167,139,250,0.2),rgba(167,139,250,0.1));border:1px solid rgba(167,139,250,0.5);border-radius:8px;padding:8px 12px;margin:4px 8px;font-size:13px;color:#a78bfa;align-items:center;justify-content:space-between;">
-          <span>🚪 Knock mode — type your hidden message</span>
-         <span onclick="cancelKnockMode()" style="cursor:pointer;font-size:16px;color:#a0aec0;">✕</span>
+      <!-- Text input wrapper -->
+      <div style="flex:1; display:flex; align-items:center; background:#1a2340; border:1px solid #1e2a45; border-radius:24px; padding:0 12px; transition:border-color 0.2s; min-width:0;" id="inputWrap">
+        <input id="msgInput" type="text" placeholder="Message..." autocomplete="off" style="flex:1; background:transparent; border:none; padding:11px 0; color:#e8eaf0; font-family:'Inter',sans-serif; font-size:14px; outline:none; min-width:0;"/>
       </div>
 
-<!-- Text input wrapper -->
-<div style="flex:1; display:flex; align-items:center; background:#1a2340; border:1px solid #1e2a45; border-radius:24px; padding:0 12px; transition:border-color 0.2s; min-width:0;" id="inputWrap">
-  <input id="msgInput" type="text" placeholder="Message..." autocomplete="off" style="flex:1; background:transparent; border:none; padding:11px 0; color:#e8eaf0; font-family:'Inter',sans-serif; font-size:14px; outline:none; min-width:0;"/>
-</div>
       <!-- Voice bar (replaces everything in recording mode) -->
       <div id="voiceBar">
         <button id="voiceTrash" onclick="cancelVoiceRec()" type="button" title="Delete">🗑️</button>
@@ -841,7 +830,6 @@
       <div class="plus-menu" id="plusMenu" style="display:none; position:absolute; bottom:100%; right:10px; background:#1a2340; border:1px solid #1e2a45; border-radius:12px; padding:8px 0; margin-bottom:8px; box-shadow:0 4px 20px rgba(0,0,0,.4); z-index:100; min-width:140px; flex-direction:column;">
         <div class="plus-item" onclick="document.getElementById('fileInput').click(); togglePlusMenu();" style="padding:10px 16px;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:10px;">📄 File</div>
         <div class="plus-item" onclick="openPollModal(); togglePlusMenu();" style="padding:10px 16px;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:10px;">📊 Poll</div>
-        <div class="plus-item" onclick="activateKnockMode(); togglePlusMenu();" style="padding:10px 16px;font-size:14px;cursor:pointer;display:flex;align-items:center;gap:10px;">🚪 Knock</div>
       </div>
     </div>
     <!-- Floating gesture hints during hold-to-record -->
@@ -1526,18 +1514,6 @@ async function openChat(username) {
   for (const m of msgs) await renderMsg(m, m.sender === me);
 
   socket.emit('seen', { sender: username });
-
-  // Load pending knocks
-fetch('/pending_knocks')
-  .then(r => r.json())
-  .then(knocks => {
-    knocks.forEach(k => {
-      if (!document.getElementById(`msg-knock-${k.id}`)) {
-        renderKnockCard(k);
-      }
-    });
-  });
-
   document.getElementById('msgInput').focus();
 }
 
@@ -1584,15 +1560,6 @@ async function renderMsg(m, isSent, prepend = false) {
         <div style="font-size:11px;color:#a0aec0;">${fSize}</div>
       </div>
       <a href="${m.media_url}" target="_blank" class="dload" style="margin-top:0;">⬇</a>
-    </div>`;
-  } else if (m.msg_type === 'knock') {
-    const knockStatus = isSent ? (m.seen ? 'Knocked ✓' : 'Knock') : (m.seen ? 'Knocked' : 'Knock');
-    const myMsg = isSent && m.sender_message ? await dec(m.sender_message) : null;
-    html += `<div class="knock-card" data-knock-id="${m.id}" style="background:linear-gradient(135deg,rgba(167,139,250,0.2),rgba(167,139,250,0.1));border:2px solid rgba(167,139,250,0.5);border-radius:12px;padding:16px;text-align:center;box-shadow:0 0 20px rgba(167,139,250,0.3);">
-      <div style="font-size:32px;margin-bottom:8px;">🚪</div>
-      <div style="color:#a78bfa;font-weight:600;margin-bottom:8px;">${knockStatus}</div>
-      ${myMsg ? `<div style="color:#e8eaf0;font-size:13px;margin-top:8px;padding:8px;background:rgba(0,0,0,0.2);border-radius:8px;">${myMsg}</div>` : ''}
-      ${!isSent && !m.seen ? `<button onclick="acknowledgeKnock(${m.id},'${m.sender}')" style="background:linear-gradient(135deg,#a78bfa,#7c3aed);color:#fff;border:none;padding:10px 16px;border-radius:8px;font-weight:600;cursor:pointer;margin-top:8px;">Knock</button>` : ''}
     </div>`;
   } else if (m.msg_type === 'poll') {
     html += renderPoll(m);
@@ -1809,14 +1776,6 @@ function cancelReply() {
 
 // ── Send ──────────────────────────────────────────────────────
 async function sendMsg() {
-
-  if (knockModeActive) {
-  const msg = document.getElementById('msgInput').value.trim();
-  if (!msg) return;
-  sendKnock(msg);
-  document.getElementById('msgInput').value = '';
-  return;
-}
   const input = document.getElementById('msgInput');
   const msg = input.value.trim();
   if (!msg || !currentChat) return;
@@ -2243,60 +2202,6 @@ function renderPoll(m) {
   });
   return html + `</div>`;
 }
-// ── Knock feature ───────────────────────────────────────────────
-
-let knockModeActive = false;
-
-function activateKnockMode() {
-  knockModeActive = true;
-  const banner = document.getElementById('knockModeBanner');
-  banner.style.display = 'flex';
-  document.getElementById('msgInput').placeholder = 'Type your knock message...';
-  document.getElementById('msgInput').focus();
-}
-
-function cancelKnockMode() {
-  knockModeActive = false;
-  document.getElementById('knockModeBanner').style.display = 'none';
-  document.getElementById('msgInput').placeholder = 'Message...';
-}
-
-function sendKnock(message) {
-  if (!currentChat) return;
-  socket.emit('send_knock', {
-    receiver: currentChat,
-    encrypted_message: message,
-    encryption_salt: ''
-  });
-  cancelKnockMode();
-}
-
-function acknowledgeKnock(knockId, sender) {
-  socket.emit('acknowledge_knock', { knock_id: knockId, sender: sender });
-  const btn = event.target;
-  btn.innerHTML = 'Door opening...';
-  btn.disabled = true;
-}
-  
-  // Visual feedback
-
-
-function renderKnockCard(knock) {
-  const ul = document.getElementById('messages');
-  const li = document.createElement('li');
-  li.id = `msg-knock-${knock.id}`;
-  li.setAttribute('data-knock-id', knock.id);
-  
-  const html = `<div class="msender">${knock.sender}</div>
-    <div class="knock-card" style="background:linear-gradient(135deg,rgba(167,139,250,0.2),rgba(167,139,250,0.1));border:2px solid rgba(167,139,250,0.5);border-radius:12px;padding:16px;text-align:center;box-shadow:0 0 20px rgba(167,139,250,0.3);">
-      <div style="font-size:32px;margin-bottom:8px;">🚪</div>
-      <div style="color:#a78bfa;font-weight:600;margin-bottom:8px;">Knock</div>
-      <button onclick="acknowledgeKnock(${knock.id},'${knock.sender}')" style="background:linear-gradient(135deg,#a78bfa,#7c3aed);color:#fff;border:none;padding:10px 16px;border-radius:8px;font-weight:600;cursor:pointer;margin-top:8px;">Open the door</button>
-    </div>`;
-  
-  li.innerHTML = html;
-  ul.appendChild(li);
-}
 
 // ── GIF (Giphy API) ───────────────────────────────────────────
 const GIPHY_API_KEY = 'GlVGYHk3VVVWVN155555555555555555'; // Use a public beta key or placeholder
@@ -2397,44 +2302,6 @@ socket.on('message_deleted', function(data) {
   if (li) {
     li.innerHTML = '<span class="deleted-text" style="color:#a0aec0;font-style:italic;font-size:13px">This message was deleted</span>';
   }
-});
-
-socket.on('knock_sent_confirm', async function(data) {
-  if (currentChat === data.receiver) {
-    await renderMsg(data, true);
-  }
-});
-
-socket.on('knock_received', async function(data) {
-  if (currentChat === data.sender) {
-    await renderMsg(data, false);
-  }
-  if ('Notification' in window && Notification.permission === 'granted') {
-    new Notification('🚪 New Knock', { body: 'Someone wants to chat with you' });
-  }
-});
-
-socket.on('knock_acknowledged', function(data) {
-  console.log('knock_acknowledged received', data);
-  const card = document.querySelector(`[data-knock-id="${data.knock_id}"]`);
-  if (card) {
-    const statusDiv = card.querySelector('div[style*="color:#a78bfa"]');
-    if (statusDiv) statusDiv.textContent = 'Knocked ✓';
-  }
-  showToast('🚪 Someone knocked!');
-});
-
-socket.on('knock_animation_sync', function(data) {
-  // Door opening animation for both users
-  const li = document.querySelector(`li[data-knock-id="${data.knock_id}"]`);
-  if (li) {
-    li.style.animation = 'knockAnimation 0.6s ease-out';
-  }
-});
-
-socket.on('knock_message_revealed', function(data) {
-  // Show hidden message after door opens
-  console.log('🔓 Message revealed:', data.encrypted_message);
 });
 
 socket.on('message_edited', async function(data) {
@@ -3015,5 +2882,646 @@ async function toggleViewersPanel() {
 </div>
 
 <script src="/static/js/call.js"></script>
+
+<!-- ═══════════════════════════════════════════════════════════════
+     KNOCK FEATURE — paste this entire block before </body>
+     It patches renderMsg, adds UI, sounds, animation, socket events.
+     Requires: existing enc(), dec(), socket, me, currentChat, getPubKey(),
+               myPublicKey, showToast(), showScreen() already defined.
+════════════════════════════════════════════════════════════════════ -->
+
+<!-- ── Knock Styles ─────────────────────────────────────────── -->
+<style>
+  /* ── Knock Card ─────────────────────────────────────────────── */
+  .knock-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 18px;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    min-width: 160px;
+  }
+  .knock-door-wrap {
+    perspective: 400px;
+    width: 56px;
+    height: 72px;
+    position: relative;
+    flex-shrink: 0;
+  }
+  .knock-door {
+    width: 100%;
+    height: 100%;
+    transform-origin: left center;
+    transform-style: preserve-3d;
+    transition: transform 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+  }
+  /* Door face */
+  .knock-door::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, #8B6914 0%, #C49A2A 40%, #8B6914 100%);
+    border-radius: 4px 4px 2px 2px;
+    border: 2px solid #5a4008;
+    box-shadow: inset -3px 0 6px rgba(0,0,0,0.3);
+  }
+  /* Door knob */
+  .knock-door::after {
+    content: '●';
+    position: absolute;
+    right: 7px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 9px;
+    color: #FFD700;
+    text-shadow: 0 0 4px rgba(255,215,0,0.8);
+    z-index: 1;
+  }
+  /* Door panels (decorative lines) */
+  .knock-door-panels {
+    position: absolute;
+    inset: 6px 6px 6px 8px;
+    border: 1.5px solid rgba(0,0,0,0.25);
+    border-radius: 2px;
+    pointer-events: none;
+    z-index: 1;
+  }
+  /* Animated open state */
+  .knock-door.open {
+    transform: rotateY(-75deg);
+  }
+  /* Door frame */
+  .knock-door-frame {
+    position: absolute;
+    inset: 0;
+    border: 2.5px solid #3d2800;
+    border-radius: 4px 4px 2px 2px;
+    pointer-events: none;
+    z-index: 0;
+  }
+  /* Room behind door (visible when open) */
+  .knock-door-back {
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse at 30% 50%, #1a1230 0%, #0a0820 100%);
+    border-radius: 4px 4px 2px 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    opacity: 0;
+    transition: opacity 0.3s 0.4s;
+    z-index: -1;
+  }
+  .knock-door.open ~ .knock-door-back {
+    opacity: 1;
+  }
+  /* Ripple rings on knock */
+  @keyframes knockRipple {
+    0%   { transform: scale(0.8); opacity: 0.7; }
+    100% { transform: scale(2.2); opacity: 0; }
+  }
+  .knock-ripple {
+    position: absolute;
+    inset: -8px;
+    border: 2px solid var(--accent);
+    border-radius: 8px;
+    pointer-events: none;
+    opacity: 0;
+  }
+  .knock-ripple.pop {
+    animation: knockRipple 0.5s ease-out forwards;
+  }
+  /* Knock card text */
+  .knock-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: inherit;
+    font-family: 'Space Grotesk', sans-serif;
+    opacity: 0.9;
+  }
+  .knock-sub {
+    font-size: 11px;
+    opacity: 0.6;
+    text-align: center;
+    line-height: 1.3;
+  }
+  /* Revealed message (fades in after door opens) */
+  .knock-revealed {
+    display: none;
+    animation: knockReveal 0.5s ease forwards;
+  }
+  @keyframes knockReveal {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  /* Acked state — subtle indicator */
+  .knock-acked-badge {
+    font-size: 10px;
+    opacity: 0.55;
+    margin-top: 2px;
+    text-align: center;
+  }
+  
+  /* ── Send-as-Knock button in plus menu ─────────────────────── */
+  .knock-menu-item {
+    padding: 10px 16px;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--accent);
+    font-weight: 600;
+    border-top: 1px solid var(--border-color);
+  }
+  .knock-menu-item:hover {
+    background: var(--accent-light);
+  }
+  
+  /* ── Knock incoming notification toast ─────────────────────── */
+  .knock-notif {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 18px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--accent);
+    border-radius: 16px;
+    box-shadow: 0 0 20px var(--accent-glow);
+    font-size: 14px;
+    font-weight: 600;
+    font-family: 'Space Grotesk', sans-serif;
+  }
+  
+  /* ── Pending-Knock overlay on send button ─────────────────────*/
+  #plusSendBtn.knock-mode {
+    color: #C49A2A !important;
+    animation: knockPulse 0.8s infinite alternate;
+  }
+  @keyframes knockPulse {
+    from { opacity: 0.7; }
+    to   { opacity: 1; filter: drop-shadow(0 0 6px #C49A2A); }
+  }
+  
+  /* ── "Knock Preview" send bar ─────────────────────────────────*/
+  #knockPreviewBar {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 14px;
+    background: linear-gradient(90deg, rgba(196,154,42,0.15), transparent);
+    border-top: 1px solid rgba(196,154,42,0.4);
+    font-size: 12px;
+    color: #C49A2A;
+    font-weight: 600;
+    font-family: 'Space Grotesk', sans-serif;
+    flex-shrink: 0;
+  }
+  #knockPreviewBar .kp-cancel {
+    margin-left: auto;
+    background: none;
+    border: none;
+    color: #f87171;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 2px 6px;
+  }
+  </style>
+  
+  <!-- ── Knock Preview Bar (above input row) ──────────────────── -->
+  <!-- Insert this right before .input-row in the DOM via JS     -->
+  
+  <!-- ── Knock Sounds (Web Audio API) ─────────────────────────── -->
+  <script>
+  /* ─── Audio Engine ──────────────────────────────────────────── */
+  const _ac = (() => {
+    try { return new (window.AudioContext || window.webkitAudioContext)(); }
+    catch { return null; }
+  })();
+  
+  function _resumeAC() {
+    if (_ac && _ac.state === 'suspended') _ac.resume();
+  }
+  
+  /** Play 3 knuckle-knock hits */
+  function playKnockSound() {
+    if (!_ac) return;
+    _resumeAC();
+    [0, 0.18, 0.36].forEach(delay => {
+      const osc  = _ac.createOscillator();
+      const gain = _ac.createGain();
+      osc.connect(gain);
+      gain.connect(_ac.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(180, _ac.currentTime + delay);
+      osc.frequency.exponentialRampToValueAtTime(80, _ac.currentTime + delay + 0.08);
+      gain.gain.setValueAtTime(0.55, _ac.currentTime + delay);
+      gain.gain.exponentialRampToValueAtTime(0.001, _ac.currentTime + delay + 0.1);
+      osc.start(_ac.currentTime + delay);
+      osc.stop(_ac.currentTime + delay + 0.12);
+    });
+  }
+  
+  /** Ascending chime — played on reveal */
+  function playRevealSound() {
+    if (!_ac) return;
+    _resumeAC();
+    [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+      const osc  = _ac.createOscillator();
+      const gain = _ac.createGain();
+      osc.connect(gain);
+      gain.connect(_ac.destination);
+      osc.type = 'sine';
+      const t = _ac.currentTime + i * 0.1;
+      osc.frequency.setValueAtTime(freq, t);
+      gain.gain.setValueAtTime(0.28, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+      osc.start(t);
+      osc.stop(t + 0.45);
+    });
+  }
+  
+  /* ─── Knock state tracking ──────────────────────────────────── */
+  let _knockMode = false;          // Are we in "send as knock" mode?
+  const _knockPending = new Map(); // msgId → { sender_message, chat }
+  
+  /* ─── Inject Knock Preview Bar into DOM ─────────────────────── */
+  (function injectKnockUI() {
+    // Knock Preview Bar
+    const bar = document.createElement('div');
+    bar.id = 'knockPreviewBar';
+    bar.innerHTML = `🚪 <span>Send as Knock — message hidden until tapped</span>
+      <button class="kp-cancel" onclick="cancelKnockMode()" title="Cancel Knock">✕</button>`;
+    const inputRow = document.getElementById('inputRow');
+    inputRow.parentNode.insertBefore(bar, inputRow);
+  
+    // Add "Send as Knock" to plus menu
+    const plusMenu = document.getElementById('plusMenu');
+    if (plusMenu) {
+      const knockItem = document.createElement('div');
+      knockItem.className = 'knock-menu-item';
+      knockItem.innerHTML = '🚪 Send as Knock';
+      knockItem.onclick = () => { enterKnockMode(); togglePlusMenu(); };
+      plusMenu.appendChild(knockItem);
+    }
+  })();
+  
+  /* ─── Knock Mode ─────────────────────────────────────────────── */
+  function enterKnockMode() {
+    _knockMode = true;
+    document.getElementById('knockPreviewBar').style.display = 'flex';
+    const sendBtn = document.getElementById('plusSendBtn');
+    sendBtn.classList.add('knock-mode');
+    document.getElementById('msgInput').placeholder = 'Type secret message…';
+    document.getElementById('msgInput').focus();
+    // Make sure send btn is visible if there's text
+    updateInputUI();
+  }
+  
+  function cancelKnockMode() {
+    _knockMode = false;
+    document.getElementById('knockPreviewBar').style.display = 'none';
+    const sendBtn = document.getElementById('plusSendBtn');
+    sendBtn.classList.remove('knock-mode');
+    document.getElementById('msgInput').placeholder = 'Message...';
+    updateInputUI();
+  }
+  
+  /* ─── Override sendMsg to handle Knock mode ─────────────────── */
+  const _origSendMsg = window.sendMsg;
+  window.sendMsg = async function sendMsg() {
+    if (!_knockMode) { return _origSendMsg(); }
+  
+    const input = document.getElementById('msgInput');
+    const msg = input.value.trim();
+    if (!msg || !currentChat) return;
+  
+    const rKey = await getPubKey(currentChat);
+    if (!rKey) { alert('Cannot get recipient key'); return; }
+    const eR = await enc(rKey, msg);
+    const eS = await enc(myPublicKey, msg);
+  
+    socket.emit('private_message', {
+      receiver: currentChat,
+      message: eR,
+      sender_message: eS,
+      msg_type: 'knock',
+      reply_to: replyingTo || ''
+    });
+  
+    cancelReply();
+    cancelKnockMode();
+    input.value = '';
+    updateInputUI();
+  };
+  
+  /* ─── Render Knock Card ──────────────────────────────────────── */
+  /**
+   * Returns HTML for a knock card.
+   * @param {number} msgId
+   * @param {boolean} isSent       - true if current user is sender
+   * @param {boolean} acknowledged - already acknowledged?
+   * @param {string}  [revealedText] - if acknowledged+revealed, the plaintext
+   */
+  function renderKnockCard(msgId, isSent, acknowledged, revealedText) {
+    const ackBadge = acknowledged
+      ? `<div class="knock-acked-badge">${isSent ? '✓ Opened' : '✓ Revealed'}</div>`
+      : '';
+  
+    const doorHtml = `
+      <div class="knock-door-wrap">
+        <div class="knock-door ${acknowledged ? 'open' : ''}" id="kd-${msgId}">
+          <div class="knock-door-panels"></div>
+        </div>
+        <div class="knock-door-frame"></div>
+        <div class="knock-door-back">✨</div>
+        <div class="knock-ripple" id="kr-${msgId}"></div>
+      </div>`;
+  
+    if (acknowledged && revealedText) {
+      // Show revealed text inline (door is open, text is visible)
+      return `<div class="knock-card" data-knock-id="${msgId}" data-acked="true">
+        ${doorHtml}
+        <span class="knock-label">🚪 Knock</span>
+        <span class="knock-revealed" style="display:block">${revealedText}</span>
+        ${ackBadge}
+      </div>`;
+    }
+  
+    if (isSent) {
+      // Sender sees: door closed, waiting
+      const waitText = acknowledged
+        ? 'They opened it!'
+        : 'Waiting for them to answer…';
+      return `<div class="knock-card" data-knock-id="${msgId}" data-acked="${acknowledged}">
+        ${doorHtml}
+        <span class="knock-label">🚪 Knock sent</span>
+        <span class="knock-sub">${waitText}</span>
+        ${ackBadge}
+      </div>`;
+    } else {
+      // Recipient sees: mystery door, tap prompt
+      if (acknowledged) {
+        return `<div class="knock-card" data-knock-id="${msgId}" data-acked="true">
+          ${doorHtml}
+          <span class="knock-label">🚪 Knock</span>
+          <span class="knock-sub">Opening…</span>
+          ${ackBadge}
+        </div>`;
+      }
+      return `<div class="knock-card" data-knock-id="${msgId}" data-acked="false"
+          onclick="handleKnockTap(${msgId}, this)" style="cursor:pointer;">
+        ${doorHtml}
+        <span class="knock-label">🚪 Someone knocked!</span>
+        <span class="knock-sub">Tap to open the door</span>
+      </div>`;
+    }
+  }
+  
+  /* ─── Tap the Knock Card (recipient) ────────────────────────── */
+  async function handleKnockTap(msgId, cardEl) {
+    if (cardEl.dataset.acked === 'true') return;   // one-time only
+    cardEl.dataset.acked = 'true';
+    cardEl.style.cursor = 'default';
+    cardEl.onclick = null;
+  
+    // 1. Play knock sound
+    playKnockSound();
+  
+    // 2. Visual ripple
+    triggerKnockRipple(msgId);
+  
+    // 3. Ack to server (which notifies sender)
+    let senderOnline = false;
+    try {
+      const res = await fetch('/knock_ack/' + msgId, { method: 'POST' });
+      const data = await res.json();
+      if (!data.ok && data.error === 'Already acknowledged') return;
+      senderOnline = !!data.sender_online;
+    } catch { /* proceed anyway */ }
+  
+    // 4. Update card label
+    const sub = cardEl.querySelector('.knock-sub');
+    if (sub) sub.textContent = senderOnline ? 'They\'re opening it…' : 'Message incoming…';
+  
+    // 5. Open door animation after short delay
+    setTimeout(() => openKnockDoor(msgId, cardEl, false), 400);
+  }
+  
+  /* ─── Door open animation + reveal ─────────────────────────── */
+  async function openKnockDoor(msgId, cardEl, isSent) {
+    // Swing door open
+    const door = document.getElementById('kd-' + msgId);
+    if (door) door.classList.add('open');
+  
+    // After door swings, reveal text
+    setTimeout(async () => {
+      playRevealSound();
+      await revealKnockMessage(msgId, cardEl, isSent);
+    }, 750);
+  }
+  
+  async function revealKnockMessage(msgId, cardEl, isSent) {
+    // Find the <li> element
+    const li = document.getElementById('msg-' + msgId);
+    if (!li) return;
+  
+    let plaintext = '🔒';
+  
+    if (isSent) {
+      // Sender: stored in _knockPending map
+      const pending = _knockPending.get(msgId);
+      if (pending && pending.sender_message) {
+        plaintext = await dec(pending.sender_message);
+      } else {
+        // Fallback: try to find sender_message from the li's data attribute
+        const senderMsg = li.dataset.senderMessage;
+        if (senderMsg) plaintext = await dec(senderMsg);
+      }
+    } else {
+      // Recipient: decrypt from data attribute
+      const encMsg = li.dataset.encMessage;
+      if (encMsg) plaintext = await dec(encMsg);
+    }
+  
+    // Update label
+    const label = cardEl.querySelector('.knock-label');
+    if (label) label.textContent = '🚪 Knock';
+  
+    const sub = cardEl.querySelector('.knock-sub');
+    if (sub) sub.style.display = 'none';
+  
+    // Inject revealed text
+    let revealedEl = cardEl.querySelector('.knock-revealed');
+    if (!revealedEl) {
+      revealedEl = document.createElement('span');
+      revealedEl.className = 'knock-revealed';
+      cardEl.appendChild(revealedEl);
+    }
+    revealedEl.textContent = plaintext;
+    revealedEl.style.display = 'block';
+  
+    // Add acked badge
+    if (!cardEl.querySelector('.knock-acked-badge')) {
+      const badge = document.createElement('div');
+      badge.className = 'knock-acked-badge';
+      badge.textContent = isSent ? '✓ Opened' : '✓ Revealed';
+      cardEl.appendChild(badge);
+    }
+  }
+  
+  function triggerKnockRipple(msgId) {
+    const ripple = document.getElementById('kr-' + msgId);
+    if (!ripple) return;
+    ripple.classList.remove('pop');
+    void ripple.offsetWidth; // reflow
+    ripple.classList.add('pop');
+  }
+  
+  /* ─── Socket: sender receives acknowledgement ───────────────── */
+  socket.on('knock_acknowledged', async function(data) {
+    const { msg_id, from, was_queued } = data;
+  
+    // Play knock sound for sender
+    playKnockSound();
+  
+    // Show notification toast
+    showKnockNotif(from, was_queued);
+  
+    // If sender is in the chat right now → open the door on their side too
+    if (currentChat === from) {
+      const li = document.getElementById('msg-' + msg_id);
+      if (li) {
+        const card = li.querySelector('.knock-card');
+        if (card) {
+          triggerKnockRipple(msg_id);
+          await openKnockDoor(msg_id, card, true);
+        }
+      }
+    } else {
+      // Mark for reveal when they navigate to that chat later
+      _knockPending.set(msg_id, { ..._knockPending.get(msg_id), pendingReveal: true, chat: from });
+    }
+  });
+  
+  function showKnockNotif(from, wasQueued) {
+    const t = document.getElementById('toast');
+    const label = wasQueued ? '🚪 Your knock was answered (offline)' : '🚪 Knock answered!';
+    t.innerHTML = `<div class="knock-notif">🚪 <span>${label}</span></div>`;
+    t.style.background = 'transparent';
+    t.style.border = 'none';
+    t.style.padding = '0';
+    t.classList.add('show');
+    setTimeout(() => {
+      t.classList.remove('show');
+      // Restore normal toast styles
+      t.style.cssText = '';
+    }, 3000);
+  }
+  
+  /* ─── Patch renderMsg to handle msg_type === 'knock' ─────────── */
+  const _origRenderMsg = window.renderMsg;
+  window.renderMsg = async function renderMsg(m, isSent, prepend = false) {
+    if (m.msg_type !== 'knock') {
+      return _origRenderMsg(m, isSent, prepend);
+    }
+  
+    // ── Knock message rendering ──
+    const ul = document.getElementById('messages');
+    const li = document.createElement('li');
+    li.id = 'msg-' + m.id;
+    if (isSent) li.classList.add('sent');
+  
+    // Store encrypted payloads for later decryption
+    if (m.message)        li.dataset.encMessage    = m.message;
+    if (m.sender_message) li.dataset.senderMessage = m.sender_message;
+  
+    // Track in pending map for sender
+    if (isSent) {
+      _knockPending.set(m.id, {
+        sender_message: m.sender_message,
+        chat: m.sender === me ? (m.receiver || currentChat) : m.sender
+      });
+    }
+  
+    const ack = !!m.knock_acknowledged;
+  
+    // Build card HTML
+    let cardHtml = '';
+    if (ack) {
+      // Already acknowledged — decrypt and show if we can
+      let plaintext = null;
+      if (isSent && m.sender_message) {
+        try { plaintext = await dec(m.sender_message); } catch {}
+      } else if (!isSent && m.message) {
+        try { plaintext = await dec(m.message); } catch {}
+      }
+      cardHtml = renderKnockCard(m.id, isSent, true, plaintext);
+    } else {
+      cardHtml = renderKnockCard(m.id, isSent, false, null);
+    }
+  
+    let html = `<div class="msender">${isSent ? 'You' : m.sender}</div>`;
+    if (m.reply_to) html += `<div class="reply-prev">↩ ${m.reply_to}</div>`;
+    html += cardHtml;
+  
+    // Ticks for sent messages
+    if (isSent) {
+      const timeTitle = m.seen ? 'Read' : (m.delivered_at ? 'Delivered' : 'Sent');
+      html += `<div class="ticks ${m.seen ? 'seen' : ''}" title="${timeTitle}">${m.seen ? '✓✓' : '✓'}</div>`;
+    }
+  
+    li.innerHTML = '<div class="reply-drag-icon">↩</div>' + html;
+  
+    // Long-press for context menu (reuse existing logic, minimal options for knock)
+    let pressTimer;
+    li.addEventListener('touchstart', e => {
+      pressTimer = setTimeout(() => {
+        // Minimal context: only forward & delete for knock messages
+        ctxMsgId = m.id;
+        ctxMsgSender = m.sender;
+        ctxMsgText = '';
+        const menu = document.getElementById('ctxMenu');
+        const emojis = document.getElementById('ctxEmojis');
+        emojis.innerHTML = '';  // no emoji reactions on knock
+        document.getElementById('ctxEdit').style.display = 'none';
+        document.getElementById('ctxDelete').style.display = isSent && !m.deleted ? 'flex' : 'none';
+        menu.classList.add('show');
+        const t = e.touches[0];
+        menu.style.left = Math.min(t.clientX, window.innerWidth - 180) + 'px';
+        menu.style.top  = Math.min(t.clientY, window.innerHeight - 200) + 'px';
+      }, 500);
+    }, { passive: true });
+    li.addEventListener('touchend', () => clearTimeout(pressTimer), { passive: true });
+  
+    if (prepend) ul.prepend(li); else ul.appendChild(li);
+    if (!prepend) li.scrollIntoView({ behavior: 'smooth' });
+  };
+  
+  /* ─── Also handle knock in the real-time socket message ─────── */
+  const _origSocketMsg = null; // We'll wrap the socket listener below
+  
+  /* Patch: After socket.on('private_message') is already registered,
+     add a second listener specifically to catch knocks for the sender side.
+     The existing listener calls renderMsg which is now patched — so this
+     is handled automatically. No extra listener needed.
+  */
+  
+  /* ─── Keyboard shortcut: Escape cancels knock mode ──────────── */
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && _knockMode) cancelKnockMode();
+  });
+  
+  /* ─── Resume AudioContext on first user interaction ─────────── */
+  document.addEventListener('touchstart', _resumeAC, { once: true, passive: true });
+  document.addEventListener('click',      _resumeAC, { once: true });
+  
+  console.log('[Knock] Feature loaded ✓');
+  </script>
 </body>
 </html>
