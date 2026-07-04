@@ -1067,23 +1067,38 @@ def handle_knock(data):
     cur.execute('''INSERT INTO knocks (sender, receiver, encrypted_message, encryption_salt, status)
         VALUES (%s, %s, %s, %s, 'pending') 
         ON CONFLICT (sender, receiver) DO UPDATE SET 
-        status='pending', acknowledged=FALSE, encrypted_message=EXCLUDED.encrypted_message, encryption_salt=EXCLUDED.encryption_salt
+        status='pending', acknowledged=FALSE, encrypted_message=EXCLUDED.encrypted_message, 
+        encryption_salt=EXCLUDED.encryption_salt
         RETURNING id, created_at''', (sender, receiver, encrypted_msg, encryption_salt))
     knock = cur.fetchone()
     conn.commit()
     cur.close()
     conn.close()
-    
-    # If receiver offline → they'll see locked card on reconnect
+
+    knock_data = {
+        'id': knock['id'],
+        'sender': sender,
+        'receiver': receiver,
+        'msg_type': 'knock',
+        'sender_message': encrypted_msg,
+        'message': '',
+        'seen': False,
+        'created_at': str(knock['created_at'])
+    }
+
+    # Send to sender so they see the card
+    emit('knock_sent_confirm', knock_data)
+
+    # Send to receiver if online
     if receiver in connected_users:
         emit('knock_received', {
             'id': knock['id'],
             'sender': sender,
+            'msg_type': 'knock',
+            'message': '',
+            'seen': False,
             'created_at': str(knock['created_at'])
         }, to=connected_users[receiver])
-    else:
-        # Offline: Stored knock will be fetched when they load chat
-        pass
 
 
 @socketio.on('acknowledge_knock')
