@@ -2415,13 +2415,12 @@ socket.on('knock_received', async function(data) {
 });
 
 socket.on('knock_acknowledged', function(data) {
-  console.log('knock_acknowledged received', data);, function(data) {
+  console.log('knock_acknowledged received', data);
   const card = document.querySelector(`[data-knock-id="${data.knock_id}"]`);
   if (card) {
     const statusDiv = card.querySelector('div[style*="color:#a78bfa"]');
     if (statusDiv) statusDiv.textContent = 'Knocked ✓';
   }
-  // Anonymous notification to sender
   showToast('🚪 Someone knocked!');
 });
 
