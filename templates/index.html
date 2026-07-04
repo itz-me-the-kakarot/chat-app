@@ -1588,7 +1588,7 @@ async function renderMsg(m, isSent, prepend = false) {
   } else if (m.msg_type === 'knock') {
     const knockStatus = isSent ? (m.seen ? 'Knocked ✓' : 'Knock') : (m.seen ? 'Knocked' : 'Knock');
     const myMsg = isSent && m.sender_message ? await dec(m.sender_message) : null;
-    html += `<div class="knock-card" style="background:linear-gradient(135deg,rgba(167,139,250,0.2),rgba(167,139,250,0.1));border:2px solid rgba(167,139,250,0.5);border-radius:12px;padding:16px;text-align:center;box-shadow:0 0 20px rgba(167,139,250,0.3);">
+    html += `<div class="knock-card" data-knock-id="${m.id}" style="background:linear-gradient(135deg,rgba(167,139,250,0.2),rgba(167,139,250,0.1));border:2px solid rgba(167,139,250,0.5);border-radius:12px;padding:16px;text-align:center;box-shadow:0 0 20px rgba(167,139,250,0.3);">
       <div style="font-size:32px;margin-bottom:8px;">🚪</div>
       <div style="color:#a78bfa;font-weight:600;margin-bottom:8px;">${knockStatus}</div>
       ${myMsg ? `<div style="color:#e8eaf0;font-size:13px;margin-top:8px;padding:8px;background:rgba(0,0,0,0.2);border-radius:8px;">${myMsg}</div>` : ''}
@@ -2415,12 +2415,13 @@ socket.on('knock_received', async function(data) {
 });
 
 socket.on('knock_acknowledged', function(data) {
-  // Sender gets acknowledgement
-  const knockCard = document.querySelector(`[data-knock-id="${data.knock_id}"]`);
-  if (knockCard) {
-    knockCard.innerHTML = 'Knock sent ✓';
-    knockCard.style.opacity = '0.7';
+  const card = document.querySelector(`[data-knock-id="${data.knock_id}"]`);
+  if (card) {
+    const statusDiv = card.querySelector('div[style*="color:#a78bfa"]');
+    if (statusDiv) statusDiv.textContent = 'Knocked ✓';
   }
+  // Anonymous notification to sender
+  showToast('🚪 Someone knocked!');
 });
 
 socket.on('knock_animation_sync', function(data) {
