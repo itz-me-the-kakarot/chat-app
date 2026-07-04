@@ -1585,12 +1585,14 @@ async function renderMsg(m, isSent, prepend = false) {
       </div>
       <a href="${m.media_url}" target="_blank" class="dload" style="margin-top:0;">⬇</a>
     </div>`;
-  } else if (m.msg_type === 'knock' && !m.sender_message) {
-    const knockStatus = m.seen ? 'Knock sent ✓' : 'Knock';
+  } else if (m.msg_type === 'knock') {
+    const knockStatus = isSent ? (m.seen ? 'Knocked ✓' : 'Knock') : (m.seen ? 'Knocked' : 'Knock');
+    const myMsg = isSent && m.sender_message ? await dec(m.sender_message) : null;
     html += `<div class="knock-card" style="background:linear-gradient(135deg,rgba(167,139,250,0.2),rgba(167,139,250,0.1));border:2px solid rgba(167,139,250,0.5);border-radius:12px;padding:16px;text-align:center;box-shadow:0 0 20px rgba(167,139,250,0.3);">
       <div style="font-size:32px;margin-bottom:8px;">🚪</div>
       <div style="color:#a78bfa;font-weight:600;margin-bottom:8px;">${knockStatus}</div>
-      ${!isSent && !m.seen ? `<button onclick="acknowledgeKnock(${m.id},'${m.sender}')" style="background:linear-gradient(135deg,#a78bfa,#7c3aed);color:#fff;border:none;padding:10px 16px;border-radius:8px;font-weight:600;cursor:pointer;margin-top:8px;">Open the door</button>` : ''}
+      ${myMsg ? `<div style="color:#e8eaf0;font-size:13px;margin-top:8px;padding:8px;background:rgba(0,0,0,0.2);border-radius:8px;">${myMsg}</div>` : ''}
+      ${!isSent && !m.seen ? `<button onclick="acknowledgeKnock(${m.id},'${m.sender}')" style="background:linear-gradient(135deg,#a78bfa,#7c3aed);color:#fff;border:none;padding:10px 16px;border-radius:8px;font-weight:600;cursor:pointer;margin-top:8px;">Knock</button>` : ''}
     </div>`;
   } else if (m.msg_type === 'poll') {
     html += renderPoll(m);
@@ -2397,9 +2399,16 @@ socket.on('message_deleted', function(data) {
   }
 });
 
-socket.on('knock_received', function(data) {
-  // Show notification without revealing receiver identity
-  console.log('🚪 Someone knocked!');
+socket.on('knock_sent_confirm', async function(data) {
+  if (currentChat === data.receiver) {
+    await renderMsg(data, true);
+  }
+});
+
+socket.on('knock_received', async function(data) {
+  if (currentChat === data.sender) {
+    await renderMsg(data, false);
+  }
   if ('Notification' in window && Notification.permission === 'granted') {
     new Notification('🚪 New Knock', { body: 'Someone wants to chat with you' });
   }
