@@ -79,6 +79,8 @@ def init_db():
     cur.execute('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS theme_color TEXT')
     cur.execute('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS pinned_msg_id INTEGER')
     cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS story_ref JSONB')
+    cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS knock_acknowledged BOOLEAN DEFAULT FALSE')
+    cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS knock_ack_queued BOOLEAN DEFAULT FALSE')
 
     # v6 features
     cur.execute('''CREATE TABLE IF NOT EXISTS groups (
@@ -120,19 +122,7 @@ def init_db():
     cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS theme TEXT DEFAULT 'violet'")
     cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_mode TEXT DEFAULT 'dark'")
     cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS glow_intensity TEXT DEFAULT 'mild'")
-# Knock feature
-    cur.execute('''CREATE TABLE IF NOT EXISTS knocks (
-        id SERIAL PRIMARY KEY,
-        sender TEXT NOT NULL,
-        receiver TEXT NOT NULL,
-        encrypted_message TEXT,
-        status TEXT DEFAULT 'pending',
-        acknowledged BOOLEAN DEFAULT FALSE,
-        acknowledged_at TIMESTAMP,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        UNIQUE(sender, receiver)
-    )''')
-    cur.execute('ALTER TABLE knocks ADD COLUMN IF NOT EXISTS encryption_salt TEXT')
+
     conn.commit()
     cur.close()
     conn.close()
@@ -455,21 +445,6 @@ def pin_message(msg_id):
         socketio.emit('message_pinned', payload, to=connected_users[me])
     return jsonify({'ok': True, 'pinned_msg_id': new_pin})
 
-@app.route('/pending_knocks', methods=['GET'])
-def get_pending_knocks():
-    if 'user_id' not in session:
-        return jsonify([])
-    me = session['user_id']
-    conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('''SELECT id, sender, status, acknowledged, created_at 
-        FROM knocks WHERE receiver=%s AND status='pending' 
-        ORDER BY created_at DESC''', (me,))
-    knocks = cur.fetchall()
-    cur.close()
-    conn.close()
-    return jsonify([{'id': k['id'], 'sender': k['sender'], 'status': k['status'], 'acknowledged': k['acknowledged'], 'created_at': str(k['created_at'])} for k in knocks])
-
 @app.route('/users')
 def get_users():
     if 'user_id' not in session:
@@ -586,7 +561,7 @@ def history(other):
         return jsonify([])
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('''SELECT id,sender,receiver,message,sender_message,msg_type,media_url,reply_to,reactions,deleted,seen,timestamp,poll_data,link_preview,seen_at,delivered_at,edited,file_metadata,is_group
+    cur.execute('''SELECT id,sender,receiver,message,sender_message,msg_type,media_url,reply_to,reactions,deleted,seen,timestamp,poll_data,link_preview,seen_at,delivered_at,edited,file_metadata,is_group,knock_acknowledged
         FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s)
         ORDER BY timestamp ASC''', (me, other, other, me))
     msgs = cur.fetchall()
@@ -602,7 +577,39 @@ def history(other):
         'poll_data': m['poll_data'], 'link_preview': m['link_preview'],
         'seen_at': str(m['seen_at']) if m['seen_at'] else None,
         'delivered_at': str(m['delivered_at']) if m['delivered_at'] else None,
-        'edited': m['edited'], 'file_metadata': m['file_metadata'], 'is_group': m['is_group']} for m in msgs])
+        'edited': m['edited'], 'file_metadata': m['file_metadata'], 'is_group': m['is_group'],
+        'knock_acknowledged': bool(m['knock_acknowledged'])} for m in msgs])
+
+@app.route('/knock_ack/<int:msg_id>', methods=['POST'])
+def knock_ack(msg_id):
+    if 'user_id' not in session:
+        return jsonify({'ok': False})
+    me = session['user_id']
+    conn = get_db()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""SELECT id, sender, receiver, knock_acknowledged
+        FROM messages WHERE id=%s AND receiver=%s AND msg_type='knock'""", (msg_id, me))
+    row = cur.fetchone()
+    if not row:
+        cur.close(); conn.close()
+        return jsonify({'ok': False, 'error': 'Not found'}), 404
+    if row['knock_acknowledged']:
+        cur.close(); conn.close()
+        return jsonify({'ok': False, 'error': 'Already acknowledged'}), 400
+    sender = row['sender']
+    cur.execute('UPDATE messages SET knock_acknowledged=TRUE WHERE id=%s', (msg_id,))
+    conn.commit()
+    cur.close(); conn.close()
+    if sender in connected_users:
+        socketio.emit('knock_acknowledged', {
+            'msg_id': msg_id, 'from': me, 'chat': me, 'was_queued': False
+        }, to=connected_users[sender])
+        return jsonify({'ok': True, 'sender_online': True})
+    else:
+        conn = get_db(); cur = conn.cursor()
+        cur.execute('UPDATE messages SET knock_ack_queued=TRUE WHERE id=%s', (msg_id,))
+        conn.commit(); cur.close(); conn.close()
+        return jsonify({'ok': True, 'sender_online': False})
 
 @app.route('/delete_message/<int:msg_id>', methods=['POST'])
 def delete_message(msg_id):
@@ -887,10 +894,28 @@ def get_media(uid):
     return jsonify([{'id': r['id'], 'url': r['media_url'], 'type': r['msg_type'], 'timestamp': str(r['timestamp'])} for r in rows])
 
 @socketio.on('connect')
+@socketio.on('connect')
 def handle_connect():
     if 'user_id' in session:
         connected_users[session['user_id']] = request.sid
         emit('user_list_update', list(connected_users.keys()), broadcast=True)
+
+        # ADD THIS:
+        user = session['user_id']
+        conn = get_db(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        cur.execute("""SELECT id, receiver AS acknowledger FROM messages
+            WHERE sender=%s AND msg_type='knock'
+            AND knock_ack_queued=TRUE AND knock_acknowledged=TRUE""", (user,))
+        queued = cur.fetchall()
+        for row in queued:
+            socketio.emit('knock_acknowledged', {
+                'msg_id': row['id'], 'from': row['acknowledger'],
+                'chat': row['acknowledger'], 'was_queued': True
+            }, to=request.sid)
+            cur.execute('UPDATE messages SET knock_ack_queued=FALSE WHERE id=%s', (row['id'],))
+        if queued:
+            conn.commit()
+        cur.close(); conn.close()
 
 @socketio.on('disconnect')
 def handle_disconnect():
@@ -1050,119 +1075,6 @@ def handle_call_end(data):
     if to in connected_users:
         emit('call-end', {'from': me, 'reason': data.get('reason', 'ended')}, to=connected_users[to])
 
-@socketio.on('send_knock')
-def handle_knock(data):
-    sender = session.get('user_id')
-    receiver = data.get('receiver')
-    encrypted_msg = data.get('encrypted_message', '')  # E2E encrypted
-    encryption_salt = data.get('encryption_salt', '')
-    
-    if not are_friends(sender, receiver):
-        return
-    
-    conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    
-    # Store knock (one per unique pair)
-    cur.execute('''INSERT INTO knocks (sender, receiver, encrypted_message, encryption_salt, status)
-        VALUES (%s, %s, %s, %s, 'pending') 
-        ON CONFLICT (sender, receiver) DO UPDATE SET 
-        status='pending', acknowledged=FALSE, encrypted_message=EXCLUDED.encrypted_message, 
-        encryption_salt=EXCLUDED.encryption_salt
-        RETURNING id, created_at''', (sender, receiver, encrypted_msg, encryption_salt))
-    knock = cur.fetchone()
-    conn.commit()
-    cur.close()
-    conn.close()
-
-    knock_data = {
-        'id': knock['id'],
-        'sender': sender,
-        'receiver': receiver,
-        'msg_type': 'knock',
-        'sender_message': encrypted_msg,
-        'message': '',
-        'seen': False,
-        'created_at': str(knock['created_at'])
-    }
-
-    # Send to sender so they see the card
-    emit('knock_sent_confirm', knock_data)
-
-    # Send to receiver if online
-    if receiver in connected_users:
-        emit('knock_received', {
-            'id': knock['id'],
-            'sender': sender,
-            'msg_type': 'knock',
-            'message': '',
-            'seen': False,
-            'created_at': str(knock['created_at'])
-        }, to=connected_users[receiver])
-
-
-@socketio.on('acknowledge_knock')
-def handle_acknowledge_knock(data):
-    me = session.get('user_id')
-    knock_id = data.get('knock_id')
-    sender = data.get('sender')
-    
-    conn = get_db()
-    cur = conn.cursor()
-    
-    # Verify ownership and set as acknowledged (once only)
-    cur.execute('''UPDATE knocks SET acknowledged=TRUE, acknowledged_at=%s, status='acknowledged' 
-        WHERE id=%s AND receiver=%s AND acknowledged=FALSE''', 
-        (datetime.utcnow(), knock_id, me))
-    conn.commit()
-    affected = cur.rowcount
-    cur.close()
-    conn.close()
-    
-    if affected > 0:  # Only if successfully updated (ensures once-only)
-        if sender in connected_users:
-            # Send real-time knock acknowledgement (no receiver identity in this notification)
-            emit('knock_acknowledged', {
-                'knock_id': knock_id,
-                'acknowledged_at': str(datetime.utcnow())
-            }, to=connected_users[sender])
-        
-        # Both online? Trigger door animation
-        if sender in connected_users and me in connected_users:
-            socketio.emit('knock_animation_sync', {
-                'knock_id': knock_id,
-                'other_user': sender
-            }, to=connected_users[me])
-            socketio.emit('knock_animation_sync', {
-                'knock_id': knock_id,
-                'other_user': me
-            }, to=connected_users[sender])
-
-
-@socketio.on('reveal_knock_message')
-def handle_reveal_knock(data):
-    me = session.get('user_id')
-    knock_id = data.get('knock_id')
-    sender = data.get('sender')
-    
-    conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    
-    # Fetch encrypted message (verify ownership)
-    cur.execute('SELECT encrypted_message, encryption_salt FROM knocks WHERE id=%s AND receiver=%s AND acknowledged=TRUE', 
-        (knock_id, me))
-    knock = cur.fetchone()
-    cur.close()
-    conn.close()
-    
-    if knock:
-        if sender in connected_users:
-            emit('knock_message_revealed', {
-                'knock_id': knock_id,
-                'encrypted_message': knock['encrypted_message'],
-                'encryption_salt': knock['encryption_salt']
-            }, to=connected_users[sender])
-            
 @app.route('/nuke')
 def nuke():
     conn = get_db()
