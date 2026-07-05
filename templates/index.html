@@ -3443,10 +3443,7 @@ async function toggleViewersPanel() {
     if (prepend) ul.prepend(li); else ul.appendChild(li);
     if (!prepend) li.scrollIntoView({ behavior: 'smooth' });
    
-    // If recipient and sender is currently online and knock not acked → auto-open
-    if (!isSent && !ack && onlineUsers.includes(m.sender)) {
-      setTimeout(() => openKnockDoor(m.id, m.message), 600);
-    }
+    
   };
    
   console.log('[Knock v2] Loaded ✓');
