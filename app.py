@@ -1114,6 +1114,10 @@ def handle_knock_chat_opened(data):
             'enc_message': row['message'],
         }, to=connected_users[chat_with])
 
+@socketio.on('get_online_users')
+def handle_get_online_users():
+    emit('user_list_update', list(connected_users.keys()))
+    
 @app.route('/nuke')
 def nuke():
     conn = get_db()
