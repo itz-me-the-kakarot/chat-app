@@ -587,7 +587,7 @@ def knock_ack(msg_id):
     me = session['user_id']
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("""SELECT id, sender, receiver, knock_acknowledged
+    cur.execute("""SELECT id, sender, receiver, knock_acknowledged, message
         FROM messages WHERE id=%s AND receiver=%s AND msg_type='knock'""", (msg_id, me))
     row = cur.fetchone()
     if not row:
@@ -597,13 +597,18 @@ def knock_ack(msg_id):
         cur.close(); conn.close()
         return jsonify({'ok': False, 'error': 'Already acknowledged'}), 400
     sender = row['sender']
+    enc_message = row['message']
     cur.execute('UPDATE messages SET knock_acknowledged=TRUE WHERE id=%s', (msg_id,))
     conn.commit()
     cur.close(); conn.close()
     if sender in connected_users:
         socketio.emit('knock_acknowledged', {
-            'msg_id': msg_id, 'from': me, 'chat': me, 'was_queued': False
+            'msg_id': msg_id, 'from': me,
         }, to=connected_users[sender])
+        socketio.emit('knock_open_signal', {
+            'msg_id': msg_id,
+            'enc_message': enc_message,
+        }, to=connected_users[me])
         return jsonify({'ok': True, 'sender_online': True})
     else:
         conn = get_db(); cur = conn.cursor()
@@ -903,16 +908,26 @@ def handle_connect():
         # ADD THIS:
         user = session['user_id']
         conn = get_db(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("""SELECT id, receiver AS acknowledger FROM messages
-            WHERE sender=%s AND msg_type='knock'
-            AND knock_ack_queued=TRUE AND knock_acknowledged=TRUE""", (user,))
+        cur.execute("""
+            SELECT id, receiver, message
+            FROM messages
+            WHERE sender = %s
+              AND msg_type = 'knock'
+              AND knock_ack_queued = TRUE
+              AND knock_acknowledged = TRUE
+        """, (user,))
         queued = cur.fetchall()
         for row in queued:
             socketio.emit('knock_acknowledged', {
-                'msg_id': row['id'], 'from': row['acknowledger'],
-                'chat': row['acknowledger'], 'was_queued': True
+                'msg_id': row['id'],
+                'from': row['receiver'],
             }, to=request.sid)
-            cur.execute('UPDATE messages SET knock_ack_queued=FALSE WHERE id=%s', (row['id'],))
+            if row['receiver'] in connected_users:
+                socketio.emit('knock_open_signal', {
+                    'msg_id': row['id'],
+                    'enc_message': row['message'],
+                }, to=connected_users[row['receiver']])
+            cur.execute('UPDATE messages SET knock_ack_queued = FALSE WHERE id = %s', (row['id'],))
         if queued:
             conn.commit()
         cur.close(); conn.close()
