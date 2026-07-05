@@ -898,7 +898,7 @@ def get_media(uid):
     cur.close(); conn.close()
     return jsonify([{'id': r['id'], 'url': r['media_url'], 'type': r['msg_type'], 'timestamp': str(r['timestamp'])} for r in rows])
 
-@socketio.on('connect')
+
 @socketio.on('connect')
 def handle_connect():
     if 'user_id' in session:
@@ -1089,6 +1089,30 @@ def handle_call_end(data):
     if not me or not to: return
     if to in connected_users:
         emit('call-end', {'from': me, 'reason': data.get('reason', 'ended')}, to=connected_users[to])
+
+@socketio.on('knock_chat_opened')
+def handle_knock_chat_opened(data):
+    sender = session.get('user_id')
+    chat_with = data.get('chat_with')
+    if not sender or not chat_with:
+        return
+    # Find any pending knock from sender to chat_with that's been acked but not yet opened
+    conn = get_db(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute("""
+        SELECT id, message FROM messages
+        WHERE sender = %s AND receiver = %s
+          AND msg_type = 'knock'
+          AND knock_acknowledged = TRUE
+          AND knock_ack_queued = FALSE
+        ORDER BY timestamp DESC LIMIT 1
+    """, (sender, chat_with))
+    row = cur.fetchone()
+    cur.close(); conn.close()
+    if row and chat_with in connected_users:
+        socketio.emit('knock_open_signal', {
+            'msg_id': row['id'],
+            'enc_message': row['message'],
+        }, to=connected_users[chat_with])
 
 @app.route('/nuke')
 def nuke():
