@@ -2415,6 +2415,11 @@ initKeys().then(async () => {
   // Init glider on the default active tab after layout is ready
   requestAnimationFrame(() => moveNavGlider(document.getElementById('navChatsTab')));
 });
+
+socket.on('connect', function() {
+  socket.emit('get_online_users');
+});
+
 window.addEventListener('resize', () => {
   const active = document.querySelector('.bottom-nav-pill .tab.active');
   if (active) moveNavGlider(active);
@@ -3244,17 +3249,6 @@ async function toggleViewersPanel() {
     }
    
     // Recipient — not yet acked
-    // Check if sender currently online
-    const senderOnlineNow = onlineUsers.includes(currentChat);
-    if (senderOnlineNow) {
-      // Will be auto-opened by socket event — show loading state
-      return `<div class="knock-card" data-knock-id="${msgId}" data-state="auto-opening">
-        ${door}
-        <span class="knock-label">🚪 Knock</span>
-        <span class="knock-sub">Opening…</span>
-      </div>`;
-    }
-   
     return `<div class="knock-card" data-knock-id="${msgId}" data-state="waiting-sender">
       ${door}
       <span class="knock-label">🚪 Knock</span>
