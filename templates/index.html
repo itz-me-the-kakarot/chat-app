@@ -3365,36 +3365,6 @@ async function toggleViewersPanel() {
     await openKnockDoor(data.msg_id, data.enc_message);
   });
    
-  // Also: when online users list updates, check if sender just came online
-  const _origUserListUpdate = null;
-  socket.on('user_list_update', function(users) {
-    // existing handler runs first (already registered), we piggyback
-    const prevOnline = onlineUsers ? [...onlineUsers] : [];
-   
-    // After a tick (so existing handler updates onlineUsers first)
-    setTimeout(() => {
-      if (!currentChat) return;
-   
-      // Did currentChat just come online?
-      const justCameOnline = users.includes(currentChat) && !prevOnline.includes(currentChat);
-      if (!justCameOnline) return;
-   
-      // Check if there are unacked knock messages from them in the chat
-      document.querySelectorAll('#messages li').forEach(li => {
-        const card = li.querySelector('.knock-card');
-        if (!card) return;
-        if (card.dataset.state !== 'waiting-sender' && card.dataset.state !== 'knocked') return;
-   
-        // This is a received knock (not sent) and sender just came online
-        // Server will emit knock_open_signal — but trigger knock sound hint
-        playKnockSound();
-        const sub = card.querySelector('.knock-sub');
-        if (sub) sub.textContent = 'Opening…';
-        const btn = card.querySelector('.knock-tap-btn');
-        if (btn) btn.remove();
-      });
-    }, 100);
-  });
    
   /* ═══════════════════════════════════════════════════════════════
      KNOCK — Sender: notification that someone knocked
@@ -3480,6 +3450,389 @@ async function toggleViewersPanel() {
   };
    
   console.log('[Knock v2] Loaded ✓');
+  </script>
+  
+<style>
+  /* ── Full Screen Door Overlay ───────────────────────────────── */
+  #knockDoorOverlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    perspective: 1200px;
+    background: transparent;
+    pointer-events: none;
+  }
+  #knockDoorOverlay.active {
+    display: block;
+    pointer-events: all;
+  }
+   
+  /* Room behind door — what you see after it opens */
+  #knockDoorRoom {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    opacity: 0;
+    transition: opacity 0.5s ease 0.6s;
+    padding: 32px;
+  }
+   
+  /* Dark mode room */
+  body:not(.mode-light) #knockDoorRoom {
+    background: radial-gradient(ellipse at 50% 40%,
+      color-mix(in srgb, var(--accent) 18%, #050810) 0%,
+      #050810 70%
+    );
+  }
+  /* Light mode room */
+  body.mode-light #knockDoorRoom {
+    background: radial-gradient(ellipse at 50% 40%,
+      color-mix(in srgb, var(--accent) 10%, #f8faff) 0%,
+      #f0f4ff 70%
+    );
+  }
+   
+  #knockDoorRoom.visible {
+    opacity: 1;
+  }
+   
+  .knock-room-icon {
+    font-size: 56px;
+    animation: roomIconPop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    opacity: 0;
+  }
+  @keyframes roomIconPop {
+    from { opacity: 0; transform: scale(0.5); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+   
+  .knock-room-msg {
+    font-family: 'Space Grotesk', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    text-align: center;
+    opacity: 0;
+    transform: translateY(12px);
+    animation: roomMsgSlide 0.5s ease 0.1s forwards;
+    max-width: 280px;
+    line-height: 1.4;
+  }
+  body:not(.mode-light) .knock-room-msg { color: #fff; }
+  body.mode-light .knock-room-msg { color: #111827; }
+   
+  @keyframes roomMsgSlide {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+   
+  .knock-room-sub {
+    font-size: 14px;
+    opacity: 0;
+    animation: roomMsgSlide 0.5s ease 0.2s forwards;
+    text-align: center;
+  }
+  body:not(.mode-light) .knock-room-sub { color: rgba(255,255,255,0.55); }
+  body.mode-light .knock-room-sub { color: rgba(0,0,0,0.45); }
+   
+  /* ── The Door Panel ─────────────────────────────────────────── */
+  #knockDoorPanel {
+    position: absolute;
+    inset: 0;
+    transform-origin: left center;
+    transform-style: preserve-3d;
+    transition: transform 0.9s cubic-bezier(0.4, 0, 0.15, 1);
+    will-change: transform;
+  }
+   
+  /* DARK MODE DOOR — neon accent */
+  body:not(.mode-light) #knockDoorPanel {
+    background: linear-gradient(
+      160deg,
+      color-mix(in srgb, var(--accent) 25%, #0a0f1e) 0%,
+      #0d1426 40%,
+      color-mix(in srgb, var(--accent) 15%, #0a0f1e) 100%
+    );
+    border-right: 3px solid var(--accent);
+    box-shadow:
+      inset -8px 0 40px rgba(0,0,0,0.6),
+      0 0 60px var(--accent-glow),
+      0 0 120px var(--accent-glow);
+  }
+   
+  /* LIGHT MODE DOOR — frosted glass */
+  body.mode-light #knockDoorPanel {
+    background: rgba(255, 255, 255, 0.55);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border-right: 2px solid rgba(255,255,255,0.8);
+    box-shadow:
+      inset -6px 0 30px rgba(255,255,255,0.4),
+      0 0 40px rgba(0,0,0,0.08);
+  }
+   
+  /* Door open state */
+  #knockDoorPanel.open {
+    transform: rotateY(-108deg);
+  }
+   
+  /* ── Door Details ────────────────────────────────────────────── */
+  /* Dark: neon panel lines */
+  .knock-door-detail {
+    position: absolute;
+    pointer-events: none;
+  }
+   
+  /* Dark mode decorative panels */
+  body:not(.mode-light) .kdp-top {
+    top: 12%; left: 8%; right: 8%; height: 28%;
+    border: 1.5px solid var(--accent);
+    border-radius: 6px;
+    box-shadow: 0 0 12px var(--accent-glow), inset 0 0 12px var(--accent-glow);
+    opacity: 0.5;
+  }
+  body:not(.mode-light) .kdp-bot {
+    top: 46%; left: 8%; right: 8%; bottom: 10%;
+    border: 1.5px solid var(--accent);
+    border-radius: 6px;
+    box-shadow: 0 0 12px var(--accent-glow), inset 0 0 12px var(--accent-glow);
+    opacity: 0.5;
+  }
+   
+  /* Light mode: frosted panel lines */
+  body.mode-light .kdp-top {
+    top: 12%; left: 8%; right: 8%; height: 28%;
+    border: 1.5px solid rgba(255,255,255,0.7);
+    border-radius: 6px;
+    background: rgba(255,255,255,0.2);
+  }
+  body.mode-light .kdp-bot {
+    top: 46%; left: 8%; right: 8%; bottom: 10%;
+    border: 1.5px solid rgba(255,255,255,0.7);
+    border-radius: 6px;
+    background: rgba(255,255,255,0.2);
+  }
+   
+  /* Knob */
+  .knock-door-knob {
+    position: absolute;
+    right: 10%;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    pointer-events: none;
+  }
+  body:not(.mode-light) .knock-door-knob {
+    background: radial-gradient(circle at 35% 35%, #fff 0%, var(--accent) 60%, var(--accent-dark) 100%);
+    box-shadow: 0 0 10px var(--accent), 0 0 24px var(--accent-glow);
+  }
+  body.mode-light .knock-door-knob {
+    background: radial-gradient(circle at 35% 35%, #fff 0%, #c8d8f0 60%, #a0b8e0 100%);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  }
+   
+  /* Door frame / edge shadow */
+  #knockDoorFrame {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 10000;
+  }
+  body:not(.mode-light) #knockDoorFrame {
+    box-shadow: inset 4px 0 20px rgba(0,0,0,0.8), inset -2px 0 8px rgba(0,0,0,0.4);
+  }
+  body.mode-light #knockDoorFrame {
+    box-shadow: inset 4px 0 16px rgba(0,0,0,0.06), inset -1px 0 4px rgba(0,0,0,0.04);
+  }
+   
+  /* ── Neon scan line (dark only) ─────────────────────────────── */
+  @keyframes scanLine {
+    0%   { top: -4px; opacity: 0.7; }
+    100% { top: 100%; opacity: 0; }
+  }
+  #knockScanLine {
+    display: none;
+    position: absolute;
+    left: 0; right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    box-shadow: 0 0 12px var(--accent), 0 0 24px var(--accent-glow);
+    pointer-events: none;
+    z-index: 2;
+  }
+  body:not(.mode-light) #knockScanLine {
+    display: block;
+  }
+  #knockDoorOverlay.active #knockScanLine {
+    animation: scanLine 1.2s ease-in forwards;
+  }
+   
+  /* ── Knock ripple circles (entry effect) ────────────────────── */
+  @keyframes knockCircle {
+    0%   { transform: translate(-50%,-50%) scale(0); opacity: 0.8; }
+    100% { transform: translate(-50%,-50%) scale(4); opacity: 0; }
+  }
+  .knock-circle {
+    position: absolute;
+    left: 50%; top: 50%;
+    width: 120px; height: 120px;
+    border-radius: 50%;
+    border: 2px solid var(--accent);
+    pointer-events: none;
+    animation: knockCircle 0.8s ease-out forwards;
+  }
+  body.mode-light .knock-circle {
+    border-color: var(--accent);
+    opacity: 0.4;
+  }
+  </style>
+   
+  <!-- ── Fullscreen Door Overlay DOM ──────────────────────────── -->
+  <div id="knockDoorOverlay">
+    <!-- Room revealed after door swings -->
+    <div id="knockDoorRoom">
+      <div class="knock-room-icon">✉️</div>
+      <div class="knock-room-msg" id="knockRoomMsg">Loading…</div>
+      <div class="knock-room-sub">Tap anywhere to dismiss</div>
+    </div>
+   
+    <!-- The door itself -->
+    <div id="knockDoorPanel">
+      <div class="knock-door-detail kdp-top"></div>
+      <div class="knock-door-detail kdp-bot"></div>
+      <div class="knock-door-knob"></div>
+      <div id="knockScanLine"></div>
+    </div>
+   
+    <!-- Frame overlay -->
+    <div id="knockDoorFrame"></div>
+  </div>
+   
+  <script>
+  /* ═══════════════════════════════════════════════════════════════
+     KNOCK FULLSCREEN — replaces openKnockDoor() from knock_v2
+  ═══════════════════════════════════════════════════════════════ */
+   
+  // Tap overlay to dismiss after reveal
+  document.getElementById('knockDoorOverlay').addEventListener('click', () => {
+    const overlay = document.getElementById('knockDoorOverlay');
+    if (overlay.dataset.revealed === 'true') dismissKnockOverlay();
+  });
+   
+  function dismissKnockOverlay() {
+    const overlay = document.getElementById('knockDoorOverlay');
+    overlay.style.transition = 'opacity 0.4s ease';
+    overlay.style.opacity = '0';
+    setTimeout(() => {
+      overlay.classList.remove('active');
+      overlay.style.opacity = '';
+      overlay.style.transition = '';
+      overlay.dataset.revealed = 'false';
+      // Reset door
+      const panel = document.getElementById('knockDoorPanel');
+      panel.style.transition = 'none';
+      panel.classList.remove('open');
+      void panel.offsetWidth;
+      panel.style.transition = '';
+      document.getElementById('knockDoorRoom').classList.remove('visible');
+    }, 400);
+  }
+   
+  async function openKnockDoor(msgId, encMessage) {
+    const li = document.getElementById('msg-' + msgId);
+    if (!li) return;
+    const card = li.querySelector('.knock-card');
+    if (card && card.dataset.state === 'revealed') return;
+    if (card) card.dataset.state = 'revealed';
+   
+    // Mark mini-card as acked
+    if (card) {
+      const sub = card.querySelector('.knock-sub');
+      if (sub) sub.textContent = 'Opening…';
+      const btn = card.querySelector('.knock-tap-btn');
+      if (btn) btn.remove();
+      const door = document.getElementById('kd-' + msgId);
+      if (door) door.classList.add('open');
+    }
+   
+    // Play knock sound
+    playKnockSound();
+   
+    // Add ripple circles
+    const overlay = document.getElementById('knockDoorOverlay');
+    overlay.classList.add('active');
+    overlay.dataset.revealed = 'false';
+   
+    // Ripple circles
+    for (let i = 0; i < 3; i++) {
+      setTimeout(() => {
+        const c = document.createElement('div');
+        c.className = 'knock-circle';
+        document.getElementById('knockDoorPanel').appendChild(c);
+        setTimeout(() => c.remove(), 900);
+      }, i * 180);
+    }
+   
+    // Swing door open after short delay
+    await new Promise(r => setTimeout(r, 500));
+    playKnockSound();
+   
+    const panel = document.getElementById('knockDoorPanel');
+    panel.classList.add('open');
+   
+    // Reveal room + decrypt message
+    await new Promise(r => setTimeout(r, 800));
+    playRevealSound();
+   
+    let plaintext = '🔒';
+    try { plaintext = await dec(encMessage); } catch {}
+   
+    document.getElementById('knockRoomMsg').textContent = plaintext;
+    document.getElementById('knockDoorRoom').classList.add('visible');
+    overlay.dataset.revealed = 'true';
+   
+    // Update mini card in messages list
+    if (card) {
+      const label = card.querySelector('.knock-label');
+      if (label) label.textContent = '🚪 Knock';
+      const sub = card.querySelector('.knock-sub');
+      if (sub) sub.style.display = 'none';
+      const revealed = document.createElement('span');
+      revealed.className = 'knock-revealed';
+      revealed.textContent = plaintext;
+      card.appendChild(revealed);
+      const badge = document.createElement('div');
+      badge.className = 'knock-acked-badge';
+      badge.textContent = '✓ Revealed';
+      card.appendChild(badge);
+    }
+  }
+   
+  /* ═══════════════════════════════════════════════════════════════
+     KNOCK — Sender opens chat → emit trigger to recipient
+     Patch openChat() to emit 'knock_chat_opened' when applicable
+  ═══════════════════════════════════════════════════════════════ */
+  const _origOpenChat = window.openChat;
+  window.openChat = async function openChat(username) {
+    await _origOpenChat(username);
+    // Emit that sender opened this chat — recipient listens and opens door
+    socket.emit('knock_chat_opened', { chat_with: username });
+  };
+   
+  /* ═══════════════════════════════════════════════════════════════
+     KNOCK — Socket: recipient receives trigger when sender opens chat
+  ═══════════════════════════════════════════════════════════════ */
+  socket.on('knock_open_signal', async function(data) {
+    await openKnockDoor(data.msg_id, data.enc_message);
+  });
+   
+  console.log('[Knock Fullscreen] Loaded ✓');
   </script>
 </body>
 </html>
