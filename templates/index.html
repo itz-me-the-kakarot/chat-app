@@ -3342,23 +3342,7 @@ async function toggleViewersPanel() {
       badge.textContent = '✓ Revealed';
       card.appendChild(badge);
     }, 1050);
-  }
-   
-  /* ═══════════════════════════════════════════════════════════════
-     KNOCK — Socket: sender comes online, recipient auto-opens
-     Server emits 'knock_acknowledged' to recipient when sender reconnects
-     and there's a pending ack queued.
-   
-     Also: when recipient is already in the chat and sender just came
-     online (user_list_update), check for unacked knocks and auto-open.
-  ═══════════════════════════════════════════════════════════════ */
-   
-  // Listen for knock_open_signal — server tells recipient to open
-  socket.on('knock_open_signal', async function(data) {
-    // data: { msg_id, enc_message }
-    await openKnockDoor(data.msg_id, data.enc_message);
-  });
-   
+  } 
    
   /* ═══════════════════════════════════════════════════════════════
      KNOCK — Sender: notification that someone knocked
