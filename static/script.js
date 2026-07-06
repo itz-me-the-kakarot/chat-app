@@ -1227,7 +1227,7 @@ socket.on('private_message', async function(data) {
     id: data.id,
     sender: data.is_own ? me : data.sender,
     message: data.message,
-    sender_message: data.message,
+    sender_message: data.sender_message,
     msg_type: data.msg_type || 'text',
     media_url: data.media_url || '',
     reply_to: data.reply_to || '',
