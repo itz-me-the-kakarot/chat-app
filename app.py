@@ -7,8 +7,7 @@ from collections import defaultdict
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
 from flask_socketio import SocketIO, emit
 from werkzeug.security import generate_password_hash, check_password_hash
-import psycopg2
-import psycopg2.extras
+import sqlite3
 import requests
 from bs4 import BeautifulSoup
 
@@ -20,22 +19,24 @@ connected_users = {}
 login_attempts = defaultdict(list)
 RATE_LIMIT = 10
 BLOCK_TIME = 10
-DATABASE_URL = os.environ.get('DATABASE_URL')
+DATABASE_URL = 'chatly.db'
 
 VALID_THEMES = {'violet', 'red', 'pink', 'green'}
 VALID_MODES = {'light', 'dark'}
 VALID_GLOW = {'off', 'mild', 'strong'}
 
 def get_db():
-    conn = psycopg2.connect(DATABASE_URL)
-    conn.autocommit = False
+    conn = sqlite3.connect(DATABASE_URL)
+    def dict_factory(cursor, row):
+        return {col[0]: row[idx] for idx, col in enumerate(cursor.description)}
+    conn.row_factory = dict_factory
     return conn
 
 def init_db():
     conn = get_db()
     cur = conn.cursor()
     cur.execute('''CREATE TABLE IF NOT EXISTS users (
-        id SERIAL PRIMARY KEY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id TEXT UNIQUE NOT NULL,
         display_name TEXT,
         password TEXT NOT NULL,
@@ -43,7 +44,7 @@ def init_db():
         avatar_url TEXT
     )''')
     cur.execute('''CREATE TABLE IF NOT EXISTS messages (
-        id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         sender TEXT NOT NULL,
         receiver TEXT NOT NULL,
         message TEXT,
@@ -51,38 +52,59 @@ def init_db():
         msg_type TEXT DEFAULT 'text',
         media_url TEXT,
         reply_to TEXT,
-        reactions JSONB DEFAULT '{}',
+        reactions TEXT DEFAULT '{}',
         deleted BOOLEAN DEFAULT FALSE,
         disappear_at TIMESTAMP,
         seen BOOLEAN DEFAULT FALSE,
         timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
     cur.execute('''CREATE TABLE IF NOT EXISTS friend_requests (
-        id SERIAL PRIMARY KEY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         sender TEXT NOT NULL,
         receiver TEXT NOT NULL,
         status TEXT DEFAULT 'pending',
         UNIQUE(sender, receiver)
     )''')
     cur.execute('''CREATE TABLE IF NOT EXISTS chat_settings (
-        id SERIAL PRIMARY KEY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         user1 TEXT NOT NULL,
         user2 TEXT NOT NULL,
         wallpaper_url TEXT,
         disappear_timer INTEGER DEFAULT 0,
         UNIQUE(user1, user2)
     )''')
-    cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS poll_data JSONB')
-    cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS link_preview JSONB')
-    cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS seen_at TIMESTAMP')
-    cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMP')
-    cur.execute('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS theme_color TEXT')
-    cur.execute('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS pinned_msg_id INTEGER')
-    cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS story_ref JSONB')
+    try:
+        cur.execute('ALTER TABLE messages ADD COLUMN poll_data TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cur.execute('ALTER TABLE messages ADD COLUMN link_preview TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cur.execute('ALTER TABLE messages ADD COLUMN seen_at TIMESTAMP')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cur.execute('ALTER TABLE messages ADD COLUMN delivered_at TIMESTAMP')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cur.execute('ALTER TABLE chat_settings ADD COLUMN theme_color TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cur.execute('ALTER TABLE chat_settings ADD COLUMN pinned_msg_id INTEGER')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cur.execute('ALTER TABLE messages ADD COLUMN story_ref TEXT')
+    except sqlite3.OperationalError:
+        pass
 
     # v6 features
     cur.execute('''CREATE TABLE IF NOT EXISTS groups (
-        id SERIAL PRIMARY KEY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         group_id TEXT UNIQUE NOT NULL,
         name TEXT NOT NULL,
         avatar_url TEXT,
@@ -95,12 +117,21 @@ def init_db():
         role TEXT DEFAULT 'member',
         PRIMARY KEY (group_id, user_id)
     )''')
-    cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS edited BOOLEAN DEFAULT FALSE')
-    cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS file_metadata JSONB')
-    cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS is_group BOOLEAN DEFAULT FALSE')
+    try:
+        cur.execute('ALTER TABLE messages ADD COLUMN edited BOOLEAN DEFAULT FALSE')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cur.execute('ALTER TABLE messages ADD COLUMN file_metadata TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cur.execute('ALTER TABLE messages ADD COLUMN is_group BOOLEAN DEFAULT FALSE')
+    except sqlite3.OperationalError:
+        pass
     # v7: Stories
     cur.execute('''CREATE TABLE IF NOT EXISTS stories (
-        id SERIAL PRIMARY KEY,
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id TEXT NOT NULL,
         media_url TEXT NOT NULL,
         media_type TEXT DEFAULT 'image',
@@ -114,12 +145,24 @@ def init_db():
         viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (story_id, viewer_id)
     )''')
-    cur.execute('ALTER TABLE story_views ADD COLUMN IF NOT EXISTS liked BOOLEAN DEFAULT FALSE')
+    try:
+        cur.execute('ALTER TABLE story_views ADD COLUMN liked BOOLEAN DEFAULT FALSE')
+    except sqlite3.OperationalError:
+        pass
 
     # v8: Global per-user theme settings
-    cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS theme TEXT DEFAULT 'violet'")
-    cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS theme_mode TEXT DEFAULT 'dark'")
-    cur.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS glow_intensity TEXT DEFAULT 'mild'")
+    try:
+        cur.execute("ALTER TABLE users ADD COLUMN theme TEXT DEFAULT 'violet'")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cur.execute("ALTER TABLE users ADD COLUMN theme_mode TEXT DEFAULT 'dark'")
+    except sqlite3.OperationalError:
+        pass
+    try:
+        cur.execute("ALTER TABLE users ADD COLUMN glow_intensity TEXT DEFAULT 'mild'")
+    except sqlite3.OperationalError:
+        pass
 
     conn.commit()
     cur.close()
@@ -136,7 +179,7 @@ def record_attempt(ip):
 
 def are_friends(a, b):
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = conn.cursor()
     cur.execute('''SELECT 1 FROM friend_requests
         WHERE ((sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s)) AND status='accepted'
     ''', (a, b, b, a))
@@ -151,8 +194,8 @@ def get_chat_key(a, b):
 def get_user_theme(user_id):
     """Fetch a user's theme prefs; falls back to sane defaults."""
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('SELECT theme, theme_mode, glow_intensity FROM users WHERE user_id=%s', (user_id,))
+    cur = conn.cursor()
+    cur.execute('SELECT theme, theme_mode, glow_intensity FROM users WHERE user_id=?', (user_id,))
     row = cur.fetchone()
     cur.close()
     conn.close()
@@ -199,8 +242,8 @@ def login():
         user_id = request.form['user_id'].strip().lower()
         password = request.form['password']
         conn = get_db()
-        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute('SELECT * FROM users WHERE user_id=%s', (user_id,))
+        cur = conn.cursor()
+        cur.execute('SELECT * FROM users WHERE user_id=?', (user_id,))
         user = cur.fetchone()
         cur.close()
         conn.close()
@@ -234,7 +277,7 @@ def signup():
         try:
             conn = get_db()
             cur = conn.cursor()
-            cur.execute('INSERT INTO users (user_id, display_name, password, theme, theme_mode, glow_intensity) VALUES (%s,%s,%s,%s,%s,%s)',
+            cur.execute('INSERT INTO users (user_id, display_name, password, theme, theme_mode, glow_intensity) VALUES (?,?,?,?,?,?)',
                         (user_id, display_name or None, hashed, theme, theme_mode, glow))
             conn.commit()
             cur.close()
@@ -257,7 +300,7 @@ def logout():
 def reset_pw(uid, newpw):
     conn = get_db()
     cur = conn.cursor()
-    cur.execute('UPDATE users SET password=%s WHERE user_id=%s', (generate_password_hash(newpw), uid))
+    cur.execute('UPDATE users SET password=? WHERE user_id=?', (generate_password_hash(newpw), uid))
     conn.commit()
     cur.close()
     conn.close()
@@ -270,7 +313,7 @@ def save_key():
     data = request.json
     conn = get_db()
     cur = conn.cursor()
-    cur.execute('UPDATE users SET public_key=%s WHERE user_id=%s', (data['key'], session['user_id']))
+    cur.execute('UPDATE users SET public_key=? WHERE user_id=?', (data['key'], session['user_id']))
     conn.commit()
     cur.close()
     conn.close()
@@ -279,8 +322,8 @@ def save_key():
 @app.route('/pubkey/<uid>')
 def pubkey(uid):
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('SELECT public_key FROM users WHERE user_id=%s', (uid,))
+    cur = conn.cursor()
+    cur.execute('SELECT public_key FROM users WHERE user_id=?', (uid,))
     row = cur.fetchone()
     cur.close()
     conn.close()
@@ -291,8 +334,8 @@ def get_profile():
     if 'user_id' not in session:
         return jsonify({})
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('SELECT user_id, display_name, avatar_url, theme, theme_mode, glow_intensity FROM users WHERE user_id=%s', (session['user_id'],))
+    cur = conn.cursor()
+    cur.execute('SELECT user_id, display_name, avatar_url, theme, theme_mode, glow_intensity FROM users WHERE user_id=?', (session['user_id'],))
     row = cur.fetchone()
     cur.close()
     conn.close()
@@ -301,8 +344,8 @@ def get_profile():
 @app.route('/profile/<uid>')
 def get_user_profile(uid):
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('SELECT user_id, display_name, avatar_url FROM users WHERE user_id=%s', (uid,))
+    cur = conn.cursor()
+    cur.execute('SELECT user_id, display_name, avatar_url FROM users WHERE user_id=?', (uid,))
     row = cur.fetchone()
     cur.close()
     conn.close()
@@ -316,9 +359,9 @@ def update_profile():
     conn = get_db()
     cur = conn.cursor()
     if 'display_name' in data:
-        cur.execute('UPDATE users SET display_name=%s WHERE user_id=%s', (data['display_name'] or None, session['user_id']))
+        cur.execute('UPDATE users SET display_name=? WHERE user_id=?', (data['display_name'] or None, session['user_id']))
     if 'avatar_url' in data:
-        cur.execute('UPDATE users SET avatar_url=%s WHERE user_id=%s', (data['avatar_url'], session['user_id']))
+        cur.execute('UPDATE users SET avatar_url=? WHERE user_id=?', (data['avatar_url'], session['user_id']))
     conn.commit()
     cur.close()
     conn.close()
@@ -348,7 +391,7 @@ def update_theme():
         if glow is not None: fields.append('glow_intensity=%s'); vals.append(glow)
         if fields:
             vals.append(session['user_id'])
-            cur.execute(f'UPDATE users SET {", ".join(fields)} WHERE user_id=%s', vals)
+            cur.execute(f'UPDATE users SET {", ".join(fields)} WHERE user_id=?', vals)
             conn.commit()
         cur.close()
         conn.close()
@@ -370,7 +413,7 @@ def upload_avatar():
     data = request.json
     conn = get_db()
     cur = conn.cursor()
-    cur.execute('UPDATE users SET avatar_url=%s WHERE user_id=%s', (data['url'], session['user_id']))
+    cur.execute('UPDATE users SET avatar_url=? WHERE user_id=?', (data['url'], session['user_id']))
     conn.commit()
     cur.close()
     conn.close()
@@ -383,8 +426,8 @@ def get_chat_settings(other):
     me = session['user_id']
     u1, u2 = get_chat_key(me, other)
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('SELECT * FROM chat_settings WHERE user1=%s AND user2=%s', (u1, u2))
+    cur = conn.cursor()
+    cur.execute('SELECT * FROM chat_settings WHERE user1=? AND user2=?', (u1, u2))
     row = cur.fetchone()
     cur.close()
     conn.close()
@@ -414,8 +457,8 @@ def pin_message(msg_id):
         return jsonify({'ok': False})
     me = session['user_id']
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('SELECT sender, receiver FROM messages WHERE id=%s', (msg_id,))
+    cur = conn.cursor()
+    cur.execute('SELECT sender, receiver FROM messages WHERE id=?', (msg_id,))
     msg = cur.fetchone()
     if not msg or (msg['sender'] != me and msg['receiver'] != me):
         cur.close(); conn.close()
@@ -425,7 +468,7 @@ def pin_message(msg_id):
     u1, u2 = get_chat_key(me, other)
 
     # Toggle pin
-    cur.execute('SELECT pinned_msg_id FROM chat_settings WHERE user1=%s AND user2=%s', (u1, u2))
+    cur.execute('SELECT pinned_msg_id FROM chat_settings WHERE user1=? AND user2=?', (u1, u2))
     row = cur.fetchone()
     new_pin = msg_id if (not row or row['pinned_msg_id'] != msg_id) else None
 
@@ -450,11 +493,11 @@ def get_users():
     q = request.args.get('q', '').lower()
     me = session['user_id']
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('''SELECT CASE WHEN sender=%s THEN receiver ELSE sender END as friend
+    cur = conn.cursor()
+    cur.execute('''SELECT CASE WHEN sender=? THEN receiver ELSE sender END as friend
         FROM friend_requests WHERE (sender=%s OR receiver=%s) AND status='accepted' ''', (me, me, me))
     friends = {r['friend'] for r in cur.fetchall()}
-    cur.execute('SELECT user_id, display_name, avatar_url FROM users WHERE user_id != %s', (me,))
+    cur.execute('SELECT user_id, display_name, avatar_url FROM users WHERE user_id != ?', (me,))
     users = cur.fetchall()
     cur.close()
     conn.close()
@@ -475,14 +518,14 @@ def get_friends():
         return jsonify([])
     me = session['user_id']
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('''SELECT CASE WHEN sender=%s THEN receiver ELSE sender END as friend
+    cur = conn.cursor()
+    cur.execute('''SELECT CASE WHEN sender=? THEN receiver ELSE sender END as friend
         FROM friend_requests WHERE (sender=%s OR receiver=%s) AND status='accepted' ''', (me, me, me))
     rows = cur.fetchall()
     result = []
     for r in rows:
         f = r['friend']
-        cur.execute('SELECT user_id, display_name, avatar_url FROM users WHERE user_id=%s', (f,))
+        cur.execute('SELECT user_id, display_name, avatar_url FROM users WHERE user_id=?', (f,))
         u = cur.fetchone()
         if u:
             result.append({'user_id': u['user_id'], 'display_name': u['display_name'] or u['user_id'], 'avatar_url': u['avatar_url'], 'online': f in connected_users})
@@ -496,8 +539,8 @@ def get_friend_requests():
         return jsonify([])
     me = session['user_id']
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('SELECT sender FROM friend_requests WHERE receiver=%s AND status=%s', (me, 'pending'))
+    cur = conn.cursor()
+    cur.execute('SELECT sender FROM friend_requests WHERE receiver=? AND status=?', (me, 'pending'))
     rows = cur.fetchall()
     cur.close()
     conn.close()
@@ -511,14 +554,14 @@ def send_request(to):
     try:
         conn = get_db()
         cur = conn.cursor()
-        cur.execute('INSERT INTO friend_requests (sender,receiver) VALUES (%s,%s)', (me, to))
+        cur.execute('INSERT INTO friend_requests (sender,receiver) VALUES (?,?)', (me, to))
         conn.commit()
         cur.close()
         conn.close()
         if to in connected_users:
             socketio.emit('friend_request', {'from': me}, to=connected_users[to])
         return jsonify({'ok': True})
-    except psycopg2.IntegrityError:
+    except sqlite3.IntegrityError:
         return jsonify({'ok': False, 'error': 'Already sent'})
 
 @app.route('/respond_request/<from_user>/<action>', methods=['POST'])
@@ -529,7 +572,7 @@ def respond_request(from_user, action):
     status = 'accepted' if action == 'accept' else 'rejected'
     conn = get_db()
     cur = conn.cursor()
-    cur.execute('UPDATE friend_requests SET status=%s WHERE sender=%s AND receiver=%s', (status, from_user, me))
+    cur.execute('UPDATE friend_requests SET status=? WHERE sender=? AND receiver=?', (status, from_user, me))
     conn.commit()
     cur.close()
     conn.close()
@@ -544,7 +587,7 @@ def remove_friend(other):
     me = session['user_id']
     conn = get_db()
     cur = conn.cursor()
-    cur.execute('DELETE FROM friend_requests WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s)', (me, other, other, me))
+    cur.execute('DELETE FROM friend_requests WHERE (sender=? AND receiver=?) OR (sender=? AND receiver=?)', (me, other, other, me))
     conn.commit()
     cur.close()
     conn.close()
@@ -558,12 +601,12 @@ def history(other):
     if not are_friends(me, other):
         return jsonify([])
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = conn.cursor()
     cur.execute('''SELECT id,sender,receiver,message,sender_message,msg_type,media_url,reply_to,reactions,deleted,seen,timestamp,poll_data,link_preview,seen_at,delivered_at,edited,file_metadata,is_group
         FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s)
         ORDER BY timestamp ASC''', (me, other, other, me))
     msgs = cur.fetchall()
-    cur.execute('UPDATE messages SET seen=TRUE, seen_at=%s WHERE sender=%s AND receiver=%s AND seen=FALSE AND is_group=FALSE', (datetime.utcnow(), other, me))
+    cur.execute('UPDATE messages SET seen=TRUE, seen_at=? WHERE sender=? AND receiver=? AND seen=FALSE AND is_group=FALSE', (datetime.utcnow(), other, me))
     conn.commit()
     cur.close()
     conn.close()
@@ -583,13 +626,13 @@ def delete_message(msg_id):
         return jsonify({'ok': False})
     me = session['user_id']
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('SELECT sender,receiver FROM messages WHERE id=%s', (msg_id,))
+    cur = conn.cursor()
+    cur.execute('SELECT sender,receiver FROM messages WHERE id=?', (msg_id,))
     msg = cur.fetchone()
     if not msg or msg['sender'] != me:
         cur.close(); conn.close()
         return jsonify({'ok': False})
-    cur.execute('UPDATE messages SET deleted=TRUE,message=NULL,sender_message=NULL,media_url=NULL WHERE id=%s', (msg_id,))
+    cur.execute('UPDATE messages SET deleted=TRUE,message=NULL,sender_message=NULL,media_url=NULL WHERE id=?', (msg_id,))
     conn.commit()
     receiver = msg['receiver']
     is_group = msg.get('is_group', False)
@@ -612,14 +655,14 @@ def edit_message(msg_id):
     new_message = data.get('message')
     new_sender_message = data.get('sender_message')
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('SELECT sender,receiver,is_group FROM messages WHERE id=%s AND deleted=FALSE', (msg_id,))
+    cur = conn.cursor()
+    cur.execute('SELECT sender,receiver,is_group FROM messages WHERE id=? AND deleted=FALSE', (msg_id,))
     msg = cur.fetchone()
     if not msg or msg['sender'] != me:
         cur.close(); conn.close()
         return jsonify({'ok': False})
 
-    cur.execute('UPDATE messages SET message=%s, sender_message=%s, edited=TRUE WHERE id=%s', (new_message, new_sender_message, msg_id))
+    cur.execute('UPDATE messages SET message=?, sender_message=?, edited=TRUE WHERE id=?', (new_message, new_sender_message, msg_id))
     conn.commit()
     receiver = msg['receiver']
     is_group = msg['is_group']
@@ -642,8 +685,8 @@ def react(msg_id):
     me = session['user_id']
     emoji = request.json.get('emoji')
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('SELECT reactions,sender,receiver FROM messages WHERE id=%s', (msg_id,))
+    cur = conn.cursor()
+    cur.execute('SELECT reactions,sender,receiver FROM messages WHERE id=?', (msg_id,))
     msg = cur.fetchone()
     if not msg:
         cur.close(); conn.close()
@@ -657,7 +700,7 @@ def react(msg_id):
             del reactions[emoji]
     else:
         reactions[emoji].append(me)
-    cur.execute('UPDATE messages SET reactions=%s WHERE id=%s', (psycopg2.extras.Json(reactions), msg_id))
+    cur.execute('UPDATE messages SET reactions=? WHERE id=?', (json.dumps(reactions), msg_id))
     conn.commit()
     other = msg['receiver'] if msg['sender'] == me else msg['sender']
     cur.close(); conn.close()
@@ -681,7 +724,7 @@ def create_story():
         return jsonify({'ok': False, 'error': 'media_url required'})
     expires_at = datetime.utcnow() + timedelta(hours=24)
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = conn.cursor()
     cur.execute('''INSERT INTO stories (user_id, media_url, media_type, caption, expires_at)
         VALUES (%s,%s,%s,%s,%s) RETURNING id, created_at, expires_at''',
         (me, media_url, media_type, caption or None, expires_at))
@@ -691,8 +734,8 @@ def create_story():
 
     # Notify friends who are online that a new story dropped
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('''SELECT CASE WHEN sender=%s THEN receiver ELSE sender END as friend
+    cur = conn.cursor()
+    cur.execute('''SELECT CASE WHEN sender=? THEN receiver ELSE sender END as friend
         FROM friend_requests WHERE (sender=%s OR receiver=%s) AND status='accepted' ''', (me, me, me))
     friends = [r['friend'] for r in cur.fetchall()]
     cur.close(); conn.close()
@@ -707,8 +750,8 @@ def create_story():
 def like_story(story_id):
     if 'user_id' not in session: return jsonify({'ok': False})
     me = session['user_id']
-    conn = get_db(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('SELECT user_id FROM stories WHERE id=%s', (story_id,))
+    conn = get_db(); cur = conn.cursor()
+    cur.execute('SELECT user_id FROM stories WHERE id=?', (story_id,))
     story = cur.fetchone()
     cur.close(); conn.close()
     if not story: return jsonify({'ok': False})
@@ -716,7 +759,7 @@ def like_story(story_id):
         return jsonify({'ok': False, 'error': 'not a friend'})
     
     conn = get_db(); cur = conn.cursor()
-    cur.execute('''INSERT INTO story_views (story_id, viewer_id, liked) VALUES (%s,%s,TRUE)
+    cur.execute('''INSERT INTO story_views (story_id, viewer_id, liked) VALUES (?,?,TRUE)
         ON CONFLICT (story_id, viewer_id) DO UPDATE SET liked = TRUE''', (story_id, me))
     conn.commit()
     cur.close(); conn.close()
@@ -731,8 +774,8 @@ def get_stories():
         return jsonify([])
     me = session['user_id']
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('''SELECT CASE WHEN sender=%s THEN receiver ELSE sender END as friend
+    cur = conn.cursor()
+    cur.execute('''SELECT CASE WHEN sender=? THEN receiver ELSE sender END as friend
         FROM friend_requests WHERE (sender=%s OR receiver=%s) AND status='accepted' ''', (me, me, me))
     friends = [r['friend'] for r in cur.fetchall()]
     user_ids = friends + [me]
@@ -789,8 +832,8 @@ def view_story(story_id):
         return jsonify({'ok': False})
     me = session['user_id']
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('SELECT user_id FROM stories WHERE id=%s', (story_id,))
+    cur = conn.cursor()
+    cur.execute('SELECT user_id FROM stories WHERE id=?', (story_id,))
     story = cur.fetchone()
     if not story:
         cur.close(); conn.close()
@@ -799,7 +842,7 @@ def view_story(story_id):
         cur.close(); conn.close()
         return jsonify({'ok': False})
     if story['user_id'] != me:
-        cur.execute('''INSERT INTO story_views (story_id, viewer_id) VALUES (%s,%s)
+        cur.execute('''INSERT INTO story_views (story_id, viewer_id) VALUES (?,?)
             ON CONFLICT (story_id, viewer_id) DO NOTHING''', (story_id, me))
         conn.commit()
     cur.close(); conn.close()
@@ -811,8 +854,8 @@ def story_viewers(story_id):
         return jsonify([])
     me = session['user_id']
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('SELECT user_id FROM stories WHERE id=%s', (story_id,))
+    cur = conn.cursor()
+    cur.execute('SELECT user_id FROM stories WHERE id=?', (story_id,))
     story = cur.fetchone()
     if not story or story['user_id'] != me:
         cur.close(); conn.close()
@@ -831,13 +874,13 @@ def delete_story(story_id):
         return jsonify({'ok': False})
     me = session['user_id']
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('SELECT user_id FROM stories WHERE id=%s', (story_id,))
+    cur = conn.cursor()
+    cur.execute('SELECT user_id FROM stories WHERE id=?', (story_id,))
     story = cur.fetchone()
     if not story or story['user_id'] != me:
         cur.close(); conn.close()
         return jsonify({'ok': False})
-    cur.execute('DELETE FROM stories WHERE id=%s', (story_id,))
+    cur.execute('DELETE FROM stories WHERE id=?', (story_id,))
     conn.commit()
     cur.close(); conn.close()
     return jsonify({'ok': True})
@@ -850,7 +893,7 @@ def get_media(uid):
     if not are_friends(me, uid):
         return jsonify([])
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = conn.cursor()
     cur.execute('''SELECT id,media_url,msg_type,timestamp FROM messages
         WHERE ((sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s))
         AND msg_type IN ('image','video') AND deleted=FALSE AND media_url IS NOT NULL
@@ -919,16 +962,16 @@ def handle_private(data):
                 pass
 
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur = conn.cursor()
     u1, u2 = get_chat_key(sender, receiver)
-    cur.execute('SELECT disappear_timer FROM chat_settings WHERE user1=%s AND user2=%s', (u1, u2))
+    cur.execute('SELECT disappear_timer FROM chat_settings WHERE user1=? AND user2=?', (u1, u2))
     settings = cur.fetchone()
     disappear_at = None
     if settings and settings['disappear_timer'] > 0:
         disappear_at = datetime.utcnow() + timedelta(seconds=settings['disappear_timer'])
     cur.execute('''INSERT INTO messages (sender,receiver,message,sender_message,msg_type,media_url,reply_to,disappear_at,poll_data,link_preview,delivered_at,file_metadata,story_ref)
         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id, timestamp''',
-        (sender, receiver, message, sender_message, msg_type, media_url, reply_to, disappear_at, psycopg2.extras.Json(poll_data) if poll_data else None, psycopg2.extras.Json(link_preview) if link_preview else None, datetime.utcnow(), psycopg2.extras.Json(file_metadata) if file_metadata else None, psycopg2.extras.Json(story_ref) if story_ref else None))
+        (sender, receiver, message, sender_message, msg_type, media_url, reply_to, disappear_at, json.dumps(poll_data) if poll_data else None, json.dumps(link_preview) if link_preview else None, datetime.utcnow(), json.dumps(file_metadata) if file_metadata else None, json.dumps(story_ref) if story_ref else None))
     row = cur.fetchone()
     msg_id = row['id']
     msg_timestamp = str(row['timestamp'])
@@ -949,7 +992,7 @@ def handle_seen(data):
     conn = get_db()
     cur = conn.cursor()
     seen_time = datetime.utcnow()
-    cur.execute('UPDATE messages SET seen=TRUE, seen_at=%s WHERE sender=%s AND receiver=%s AND seen=FALSE', (seen_time, sender, me))
+    cur.execute('UPDATE messages SET seen=TRUE, seen_at=? WHERE sender=? AND receiver=? AND seen=FALSE', (seen_time, sender, me))
     conn.commit()
     cur.close(); conn.close()
     if sender in connected_users:
@@ -963,8 +1006,8 @@ def handle_vote_poll(data):
     if not me or not msg_id or option_id is None: return
 
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('SELECT poll_data, sender, receiver FROM messages WHERE id=%s', (msg_id,))
+    cur = conn.cursor()
+    cur.execute('SELECT poll_data, sender, receiver FROM messages WHERE id=?', (msg_id,))
     msg = cur.fetchone()
     if not msg or not msg['poll_data']:
         cur.close(); conn.close()
@@ -978,7 +1021,7 @@ def handle_vote_poll(data):
         if opt['id'] == option_id:
             opt['votes'].append(me)
 
-    cur.execute('UPDATE messages SET poll_data=%s WHERE id=%s', (psycopg2.extras.Json(poll_data), msg_id))
+    cur.execute('UPDATE messages SET poll_data=? WHERE id=?', (json.dumps(poll_data), msg_id))
     conn.commit()
 
     other = msg['receiver'] if msg['sender'] == me else msg['sender']
