@@ -952,7 +952,6 @@ def handle_private(data):
     if not are_friends(sender, receiver):
         return
     message = data.get('message', '')
-    sender_message = data.get('sender_message', '')
     msg_type = data.get('msg_type', 'text')
     media_url = data.get('media_url', '')
     reply_to = data.get('reply_to', '')
@@ -962,7 +961,7 @@ def handle_private(data):
 
     link_preview = None
     if msg_type == 'text':
-        url_match = re.search(r'(https?://[^\s]+)', sender_message)
+        url_match = re.search(r'(https?://[^\s]+)',message)
         if url_match:
             url = url_match.group(0)
             try:
