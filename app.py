@@ -47,7 +47,7 @@ def init_db():
         sender TEXT NOT NULL,
         receiver TEXT NOT NULL,
         message TEXT,
-        message TEXT,
+        sender_message TEXT,
         msg_type TEXT DEFAULT 'text',
         media_url TEXT,
         reply_to TEXT,
@@ -79,8 +79,6 @@ def init_db():
     cur.execute('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS theme_color TEXT')
     cur.execute('ALTER TABLE chat_settings ADD COLUMN IF NOT EXISTS pinned_msg_id INTEGER')
     cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS story_ref JSONB')
-    cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS knock_acknowledged BOOLEAN DEFAULT FALSE')
-    cur.execute('ALTER TABLE messages ADD COLUMN IF NOT EXISTS knock_ack_queued BOOLEAN DEFAULT FALSE')
 
     # v6 features
     cur.execute('''CREATE TABLE IF NOT EXISTS groups (
@@ -561,7 +559,7 @@ def history(other):
         return jsonify([])
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('''SELECT id,sender,receiver,message,message,msg_type,media_url,reply_to,reactions,deleted,seen,timestamp,poll_data,link_preview,seen_at,delivered_at,edited,file_metadata,is_group,knock_acknowledged
+    cur.execute('''SELECT id,sender,receiver,message,sender_message,msg_type,media_url,reply_to,reactions,deleted,seen,timestamp,poll_data,link_preview,seen_at,delivered_at,edited,file_metadata,is_group
         FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s)
         ORDER BY timestamp ASC''', (me, other, other, me))
     msgs = cur.fetchall()
@@ -570,51 +568,14 @@ def history(other):
     cur.close()
     conn.close()
     return jsonify([{'id': m['id'], 'sender': m['sender'], 'receiver': m['receiver'], 'message': m['message'],
-        'message': m['message'], 'msg_type': m['msg_type'],
+        'sender_message': m['sender_message'], 'msg_type': m['msg_type'],
         'media_url': m['media_url'], 'reply_to': m['reply_to'],
         'reactions': m['reactions'] or {}, 'deleted': m['deleted'],
         'seen': m['seen'], 'timestamp': str(m['timestamp']),
         'poll_data': m['poll_data'], 'link_preview': m['link_preview'],
         'seen_at': str(m['seen_at']) if m['seen_at'] else None,
         'delivered_at': str(m['delivered_at']) if m['delivered_at'] else None,
-        'edited': m['edited'], 'file_metadata': m['file_metadata'], 'is_group': m['is_group'],
-        'knock_acknowledged': bool(m['knock_acknowledged'])} for m in msgs])
-
-@app.route('/knock_ack/<int:msg_id>', methods=['POST'])
-def knock_ack(msg_id):
-    if 'user_id' not in session:
-        return jsonify({'ok': False})
-    me = session['user_id']
-    conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("""SELECT id, sender, receiver, knock_acknowledged, message
-        FROM messages WHERE id=%s AND receiver=%s AND msg_type='knock'""", (msg_id, me))
-    row = cur.fetchone()
-    if not row:
-        cur.close(); conn.close()
-        return jsonify({'ok': False, 'error': 'Not found'}), 404
-    if row['knock_acknowledged']:
-        cur.close(); conn.close()
-        return jsonify({'ok': False, 'error': 'Already acknowledged'}), 400
-    sender = row['sender']
-    enc_message = row['message']
-    cur.execute('UPDATE messages SET knock_acknowledged=TRUE WHERE id=%s', (msg_id,))
-    conn.commit()
-    cur.close(); conn.close()
-    if sender in connected_users:
-        socketio.emit('knock_acknowledged', {
-            'msg_id': msg_id, 'from': me,
-        }, to=connected_users[sender])
-        socketio.emit('knock_open_signal', {
-            'msg_id': msg_id,
-            'enc_message': enc_message,
-        }, to=connected_users[me])
-        return jsonify({'ok': True, 'sender_online': True})
-    else:
-        conn = get_db(); cur = conn.cursor()
-        cur.execute('UPDATE messages SET knock_ack_queued=TRUE WHERE id=%s', (msg_id,))
-        conn.commit(); cur.close(); conn.close()
-        return jsonify({'ok': True, 'sender_online': False})
+        'edited': m['edited'], 'file_metadata': m['file_metadata'], 'is_group': m['is_group']} for m in msgs])
 
 @app.route('/delete_message/<int:msg_id>', methods=['POST'])
 def delete_message(msg_id):
@@ -628,7 +589,7 @@ def delete_message(msg_id):
     if not msg or msg['sender'] != me:
         cur.close(); conn.close()
         return jsonify({'ok': False})
-    cur.execute('UPDATE messages SET deleted=TRUE,message=NULL,message=NULL,media_url=NULL WHERE id=%s', (msg_id,))
+    cur.execute('UPDATE messages SET deleted=TRUE,message=NULL,sender_message=NULL,media_url=NULL WHERE id=%s', (msg_id,))
     conn.commit()
     receiver = msg['receiver']
     is_group = msg.get('is_group', False)
@@ -649,7 +610,7 @@ def edit_message(msg_id):
     me = session['user_id']
     data = request.json
     new_message = data.get('message')
-    new_message = data.get('message')
+    new_sender_message = data.get('sender_message')
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute('SELECT sender,receiver,is_group FROM messages WHERE id=%s AND deleted=FALSE', (msg_id,))
@@ -658,13 +619,13 @@ def edit_message(msg_id):
         cur.close(); conn.close()
         return jsonify({'ok': False})
 
-    cur.execute('UPDATE messages SET message=%s, message=%s, edited=TRUE WHERE id=%s', (new_message, new_message, msg_id))
+    cur.execute('UPDATE messages SET message=%s, sender_message=%s, edited=TRUE WHERE id=%s', (new_message, new_sender_message, msg_id))
     conn.commit()
     receiver = msg['receiver']
     is_group = msg['is_group']
     cur.close(); conn.close()
 
-    payload = {'id': msg_id, 'message': new_message, 'message': new_message, 'edited': True}
+    payload = {'id': msg_id, 'message': new_message, 'sender_message': new_sender_message, 'edited': True}
     if is_group:
         socketio.emit('message_edited', payload, to=receiver)
     else:
@@ -898,39 +859,11 @@ def get_media(uid):
     cur.close(); conn.close()
     return jsonify([{'id': r['id'], 'url': r['media_url'], 'type': r['msg_type'], 'timestamp': str(r['timestamp'])} for r in rows])
 
-
 @socketio.on('connect')
 def handle_connect():
     if 'user_id' in session:
         connected_users[session['user_id']] = request.sid
         emit('user_list_update', list(connected_users.keys()), broadcast=True)
-
-        # ADD THIS:
-        user = session['user_id']
-        conn = get_db(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cur.execute("""
-            SELECT id, receiver, message
-            FROM messages
-            WHERE sender = %s
-              AND msg_type = 'knock'
-              AND knock_ack_queued = TRUE
-              AND knock_acknowledged = TRUE
-        """, (user,))
-        queued = cur.fetchall()
-        for row in queued:
-            socketio.emit('knock_acknowledged', {
-                'msg_id': row['id'],
-                'from': row['receiver'],
-            }, to=request.sid)
-            if row['receiver'] in connected_users:
-                socketio.emit('knock_open_signal', {
-                    'msg_id': row['id'],
-                    'enc_message': row['message'],
-                }, to=connected_users[row['receiver']])
-            cur.execute('UPDATE messages SET knock_ack_queued = FALSE WHERE id = %s', (row['id'],))
-        if queued:
-            conn.commit()
-        cur.close(); conn.close()
 
 @socketio.on('disconnect')
 def handle_disconnect():
@@ -952,6 +885,7 @@ def handle_private(data):
     if not are_friends(sender, receiver):
         return
     message = data.get('message', '')
+    sender_message = data.get('sender_message', '')
     msg_type = data.get('msg_type', 'text')
     media_url = data.get('media_url', '')
     reply_to = data.get('reply_to', '')
@@ -961,7 +895,7 @@ def handle_private(data):
 
     link_preview = None
     if msg_type == 'text':
-        url_match = re.search(r'(https?://[^\s]+)',message)
+        url_match = re.search(r'(https?://[^\s]+)', sender_message)
         if url_match:
             url = url_match.group(0)
             try:
@@ -992,9 +926,9 @@ def handle_private(data):
     disappear_at = None
     if settings and settings['disappear_timer'] > 0:
         disappear_at = datetime.utcnow() + timedelta(seconds=settings['disappear_timer'])
-    cur.execute('''INSERT INTO messages (sender,receiver,message,message,msg_type,media_url,reply_to,disappear_at,poll_data,link_preview,delivered_at,file_metadata,story_ref)
+    cur.execute('''INSERT INTO messages (sender,receiver,message,sender_message,msg_type,media_url,reply_to,disappear_at,poll_data,link_preview,delivered_at,file_metadata,story_ref)
         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id, timestamp''',
-        (sender, receiver, message, message, msg_type, media_url, reply_to, disappear_at, psycopg2.extras.Json(poll_data) if poll_data else None, psycopg2.extras.Json(link_preview) if link_preview else None, datetime.utcnow(), psycopg2.extras.Json(file_metadata) if file_metadata else None, psycopg2.extras.Json(story_ref) if story_ref else None))
+        (sender, receiver, message, sender_message, msg_type, media_url, reply_to, disappear_at, psycopg2.extras.Json(poll_data) if poll_data else None, psycopg2.extras.Json(link_preview) if link_preview else None, datetime.utcnow(), psycopg2.extras.Json(file_metadata) if file_metadata else None, psycopg2.extras.Json(story_ref) if story_ref else None))
     row = cur.fetchone()
     msg_id = row['id']
     msg_timestamp = str(row['timestamp'])
@@ -1004,7 +938,7 @@ def handle_private(data):
         emit('private_message', {'id': msg_id, 'sender': sender, 'message': message,
             'msg_type': msg_type, 'media_url': media_url, 'reply_to': reply_to,
             'poll_data': poll_data, 'link_preview': link_preview, 'timestamp': msg_timestamp, 'file_metadata': file_metadata}, to=connected_users[receiver])
-    emit('private_message', {'id': msg_id, 'sender': sender, 'message': message,
+    emit('private_message', {'id': msg_id, 'sender': sender, 'message': sender_message,
         'is_own': True, 'msg_type': msg_type, 'media_url': media_url, 'reply_to': reply_to,
         'poll_data': poll_data, 'link_preview': link_preview, 'timestamp': msg_timestamp, 'file_metadata': file_metadata}, to=request.sid)
 
@@ -1089,34 +1023,6 @@ def handle_call_end(data):
     if to in connected_users:
         emit('call-end', {'from': me, 'reason': data.get('reason', 'ended')}, to=connected_users[to])
 
-@socketio.on('knock_chat_opened')
-def handle_knock_chat_opened(data):
-    sender = session.get('user_id')
-    chat_with = data.get('chat_with')
-    if not sender or not chat_with:
-        return
-    # Find any pending knock from sender to chat_with that's been acked but not yet opened
-    conn = get_db(); cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("""
-        SELECT id, message FROM messages
-        WHERE sender = %s AND receiver = %s
-          AND msg_type = 'knock'
-          AND knock_acknowledged = TRUE
-          AND knock_ack_queued = FALSE
-        ORDER BY timestamp DESC LIMIT 1
-    """, (sender, chat_with))
-    row = cur.fetchone()
-    cur.close(); conn.close()
-    if row and chat_with in connected_users:
-        socketio.emit('knock_open_signal', {
-            'msg_id': row['id'],
-            'enc_message': row['message'],
-        }, to=connected_users[chat_with])
-
-@socketio.on('get_online_users')
-def handle_get_online_users():
-    emit('user_list_update', list(connected_users.keys()))
-    
 @app.route('/nuke')
 def nuke():
     conn = get_db()
