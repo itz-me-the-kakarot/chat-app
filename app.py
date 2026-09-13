@@ -47,7 +47,7 @@ def init_db():
         sender TEXT NOT NULL,
         receiver TEXT NOT NULL,
         message TEXT,
-        sender_message TEXT,
+        message TEXT,
         msg_type TEXT DEFAULT 'text',
         media_url TEXT,
         reply_to TEXT,
@@ -561,7 +561,7 @@ def history(other):
         return jsonify([])
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute('''SELECT id,sender,receiver,message,sender_message,msg_type,media_url,reply_to,reactions,deleted,seen,timestamp,poll_data,link_preview,seen_at,delivered_at,edited,file_metadata,is_group,knock_acknowledged
+    cur.execute('''SELECT id,sender,receiver,message,message,msg_type,media_url,reply_to,reactions,deleted,seen,timestamp,poll_data,link_preview,seen_at,delivered_at,edited,file_metadata,is_group,knock_acknowledged
         FROM messages WHERE (sender=%s AND receiver=%s) OR (sender=%s AND receiver=%s)
         ORDER BY timestamp ASC''', (me, other, other, me))
     msgs = cur.fetchall()
@@ -570,7 +570,7 @@ def history(other):
     cur.close()
     conn.close()
     return jsonify([{'id': m['id'], 'sender': m['sender'], 'receiver': m['receiver'], 'message': m['message'],
-        'sender_message': m['sender_message'], 'msg_type': m['msg_type'],
+        'message': m['message'], 'msg_type': m['msg_type'],
         'media_url': m['media_url'], 'reply_to': m['reply_to'],
         'reactions': m['reactions'] or {}, 'deleted': m['deleted'],
         'seen': m['seen'], 'timestamp': str(m['timestamp']),
@@ -628,7 +628,7 @@ def delete_message(msg_id):
     if not msg or msg['sender'] != me:
         cur.close(); conn.close()
         return jsonify({'ok': False})
-    cur.execute('UPDATE messages SET deleted=TRUE,message=NULL,sender_message=NULL,media_url=NULL WHERE id=%s', (msg_id,))
+    cur.execute('UPDATE messages SET deleted=TRUE,message=NULL,message=NULL,media_url=NULL WHERE id=%s', (msg_id,))
     conn.commit()
     receiver = msg['receiver']
     is_group = msg.get('is_group', False)
@@ -649,7 +649,7 @@ def edit_message(msg_id):
     me = session['user_id']
     data = request.json
     new_message = data.get('message')
-    new_sender_message = data.get('sender_message')
+    new_message = data.get('message')
     conn = get_db()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute('SELECT sender,receiver,is_group FROM messages WHERE id=%s AND deleted=FALSE', (msg_id,))
@@ -658,13 +658,13 @@ def edit_message(msg_id):
         cur.close(); conn.close()
         return jsonify({'ok': False})
 
-    cur.execute('UPDATE messages SET message=%s, sender_message=%s, edited=TRUE WHERE id=%s', (new_message, new_sender_message, msg_id))
+    cur.execute('UPDATE messages SET message=%s, message=%s, edited=TRUE WHERE id=%s', (new_message, new_message, msg_id))
     conn.commit()
     receiver = msg['receiver']
     is_group = msg['is_group']
     cur.close(); conn.close()
 
-    payload = {'id': msg_id, 'message': new_message, 'sender_message': new_sender_message, 'edited': True}
+    payload = {'id': msg_id, 'message': new_message, 'message': new_message, 'edited': True}
     if is_group:
         socketio.emit('message_edited', payload, to=receiver)
     else:
@@ -992,9 +992,9 @@ def handle_private(data):
     disappear_at = None
     if settings and settings['disappear_timer'] > 0:
         disappear_at = datetime.utcnow() + timedelta(seconds=settings['disappear_timer'])
-    cur.execute('''INSERT INTO messages (sender,receiver,message,sender_message,msg_type,media_url,reply_to,disappear_at,poll_data,link_preview,delivered_at,file_metadata,story_ref)
+    cur.execute('''INSERT INTO messages (sender,receiver,message,message,msg_type,media_url,reply_to,disappear_at,poll_data,link_preview,delivered_at,file_metadata,story_ref)
         VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) RETURNING id, timestamp''',
-        (sender, receiver, message, sender_message, msg_type, media_url, reply_to, disappear_at, psycopg2.extras.Json(poll_data) if poll_data else None, psycopg2.extras.Json(link_preview) if link_preview else None, datetime.utcnow(), psycopg2.extras.Json(file_metadata) if file_metadata else None, psycopg2.extras.Json(story_ref) if story_ref else None))
+        (sender, receiver, message, message, msg_type, media_url, reply_to, disappear_at, psycopg2.extras.Json(poll_data) if poll_data else None, psycopg2.extras.Json(link_preview) if link_preview else None, datetime.utcnow(), psycopg2.extras.Json(file_metadata) if file_metadata else None, psycopg2.extras.Json(story_ref) if story_ref else None))
     row = cur.fetchone()
     msg_id = row['id']
     msg_timestamp = str(row['timestamp'])
@@ -1004,7 +1004,7 @@ def handle_private(data):
         emit('private_message', {'id': msg_id, 'sender': sender, 'message': message,
             'msg_type': msg_type, 'media_url': media_url, 'reply_to': reply_to,
             'poll_data': poll_data, 'link_preview': link_preview, 'timestamp': msg_timestamp, 'file_metadata': file_metadata}, to=connected_users[receiver])
-    emit('private_message', {'id': msg_id, 'sender': sender, 'message': sender_message,
+    emit('private_message', {'id': msg_id, 'sender': sender, 'message': message,
         'is_own': True, 'msg_type': msg_type, 'media_url': media_url, 'reply_to': reply_to,
         'poll_data': poll_data, 'link_preview': link_preview, 'timestamp': msg_timestamp, 'file_metadata': file_metadata}, to=request.sid)
 
